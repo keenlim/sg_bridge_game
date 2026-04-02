@@ -1,3 +1,5 @@
+import type { D1Database, DurableObjectNamespace } from '@cloudflare/workers-types';
+
 export type Suit = '♣' | '♦' | '♥' | '♠';
 export type BidSuit = Suit | '🚫';
 

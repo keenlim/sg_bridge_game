@@ -3,6 +3,7 @@ import type { GameState, PlayerGameView, Suit, Hand, Env, TrickRecord } from './
 import { NUM_PLAYERS, MAX_BID, CARD_SUITS } from './types';
 import { generateHands, getBidFromNum, getNumFromBid, getValidSuits, compareCards } from './bridge';
 import type { ClientMessage, ServerMessage } from './protocol';
+import { recordGameResult, getWinnerSeats } from './stats';
 
 interface SessionInfo {
   playerId: string;
@@ -612,8 +613,11 @@ export class GameRoom extends DurableObject {
           bidderWon: true,
           winnerNames,
         });
-        // TODO: record game result for stats/leaderboards when implemented
-        // Example: await recordGameResult(env, state.players, { bidderWon, winnerNames })
+        await recordGameResult(
+          (this.env as Env).DB,
+          state.players,
+          getWinnerSeats(bidder, partner, true),
+        );
 
         await this.saveState(state);
         this.broadcastFullState(state);
@@ -631,8 +635,11 @@ export class GameRoom extends DurableObject {
           bidderWon: false,
           winnerNames,
         });
-        // TODO: record game result for stats/leaderboards when implemented
-        // Example: await recordGameResult(env, state.players, { bidderWon, winnerNames })
+        await recordGameResult(
+          (this.env as Env).DB,
+          state.players,
+          getWinnerSeats(bidder, partner, false),
+        );
 
         await this.saveState(state);
         this.broadcastFullState(state);
