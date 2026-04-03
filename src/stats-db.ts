@@ -96,3 +96,106 @@ export async function recordGameStats(
     await db.batch(stmts);
   }
 }
+
+function pct(wins: number, games: number): number {
+  return games === 0 ? 0 : Math.round((wins / games) * 1000) / 10;
+}
+
+export async function getPlayerStats(db: D1Database, groupId?: string): Promise<PlayerStatRow[]> {
+  const where = groupId ? 'WHERE gr.group_id = ?' : '';
+  const bindings: string[] = groupId ? [groupId] : [];
+
+  const main = await db
+    .prepare(
+      `SELECT
+         u.telegram_id, u.display_name,
+         COUNT(*) as games,
+         SUM(gr.won) as wins,
+         ROUND(100.0 * SUM(gr.won) / COUNT(*), 1) as win_pct,
+         SUM(CASE WHEN gr.role = 'bidder' THEN 1 ELSE 0 END) as bidder_games,
+         SUM(CASE WHEN gr.role = 'bidder' AND gr.won = 1 THEN 1 ELSE 0 END) as bidder_wins,
+         SUM(CASE WHEN gr.role = 'partner' THEN 1 ELSE 0 END) as partner_games,
+         SUM(CASE WHEN gr.role = 'partner' AND gr.won = 1 THEN 1 ELSE 0 END) as partner_wins,
+         SUM(CASE WHEN gr.role = 'opposition' THEN 1 ELSE 0 END) as opp_games,
+         SUM(CASE WHEN gr.role = 'opposition' AND gr.won = 1 THEN 1 ELSE 0 END) as opp_wins
+       FROM game_records gr
+       JOIN users u ON u.telegram_id = gr.telegram_id
+       ${where}
+       GROUP BY gr.telegram_id
+       ORDER BY win_pct DESC`,
+    )
+    .bind(...bindings)
+    .all<{
+      telegram_id: number; display_name: string;
+      games: number; wins: number; win_pct: number;
+      bidder_games: number; bidder_wins: number;
+      partner_games: number; partner_wins: number;
+      opp_games: number; opp_wins: number;
+    }>();
+
+  const suitWhere = groupId ? "WHERE role = 'bidder' AND group_id = ?" : "WHERE role = 'bidder'";
+  const suits = await db
+    .prepare(
+      `SELECT telegram_id, bid_suit
+       FROM (
+         SELECT telegram_id, bid_suit,
+                ROW_NUMBER() OVER (PARTITION BY telegram_id ORDER BY COUNT(*) DESC) as rn
+         FROM game_records
+         ${suitWhere}
+         GROUP BY telegram_id, bid_suit
+       )
+       WHERE rn = 1`,
+    )
+    .bind(...bindings)
+    .all<{ telegram_id: number; bid_suit: string }>();
+
+  const favSuit = new Map((suits.results ?? []).map((r) => [r.telegram_id, r.bid_suit]));
+
+  return (main.results ?? []).map((r) => ({
+    telegramId: r.telegram_id,
+    displayName: r.display_name,
+    games: r.games,
+    wins: r.wins,
+    winPct: r.win_pct,
+    bidder: { games: r.bidder_games, wins: r.bidder_wins, winPct: pct(r.bidder_wins, r.bidder_games) },
+    partner: { games: r.partner_games, wins: r.partner_wins, winPct: pct(r.partner_wins, r.partner_games) },
+    opposition: { games: r.opp_games, wins: r.opp_wins, winPct: pct(r.opp_wins, r.opp_games) },
+    favBidSuit: favSuit.get(r.telegram_id) ?? null,
+  }));
+}
+
+export async function getPairStats(db: D1Database, groupId?: string): Promise<PairStatRow[]> {
+  const where = groupId ? 'WHERE gr1.group_id = ?' : '';
+  const bindings: string[] = groupId ? [groupId] : [];
+
+  const rows = await db
+    .prepare(
+      `SELECT
+         u1.display_name as player1,
+         u2.display_name as player2,
+         COUNT(*) as games,
+         SUM(CASE WHEN gr1.won = 1 THEN 1 ELSE 0 END) as wins,
+         ROUND(100.0 * SUM(CASE WHEN gr1.won = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) as win_pct
+       FROM game_records gr1
+       JOIN game_records gr2
+         ON gr1.game_id = gr2.game_id
+        AND gr1.telegram_id < gr2.telegram_id
+        AND gr1.won = gr2.won
+       JOIN users u1 ON u1.telegram_id = gr1.telegram_id
+       JOIN users u2 ON u2.telegram_id = gr2.telegram_id
+       ${where}
+       GROUP BY gr1.telegram_id, gr2.telegram_id
+       HAVING COUNT(*) >= 2
+       ORDER BY win_pct DESC`,
+    )
+    .bind(...bindings)
+    .all<{ player1: string; player2: string; games: number; wins: number; win_pct: number }>();
+
+  return (rows.results ?? []).map((r) => ({
+    player1: r.player1,
+    player2: r.player2,
+    games: r.games,
+    wins: r.wins,
+    winPct: r.win_pct,
+  }));
+}

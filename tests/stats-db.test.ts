@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recordGameStats } from '../src/stats-db';
+import { recordGameStats, getPlayerStats, getPairStats } from '../src/stats-db';
 import type { Player } from '../src/types';
 
 // Minimal D1 mock that captures batch() calls
@@ -92,5 +92,43 @@ describe('recordGameStats', () => {
     const tg300row = db._inserted.find((r) => r.args[3] === 300)!;
     expect(tg100row.args[5]).toBe(1); // won
     expect(tg300row.args[5]).toBe(0); // lost
+  });
+});
+
+// Mock that returns empty results (smoke tests — SQL logic is tested via D1)
+function makeEmptyDb() {
+  return {
+    prepare(_sql: string) {
+      return {
+        bind(..._args: unknown[]) {
+          return {
+            all: async () => ({ results: [] }),
+            first: async () => null,
+          };
+        },
+      };
+    },
+  } as unknown as D1Database;
+}
+
+describe('getPlayerStats', () => {
+  it('returns an empty array when no records exist', async () => {
+    const db = makeEmptyDb();
+    const result = await getPlayerStats(db);
+    expect(result).toEqual([]);
+  });
+
+  it('accepts an optional groupId without throwing', async () => {
+    const db = makeEmptyDb();
+    const result = await getPlayerStats(db, '-100200300');
+    expect(result).toEqual([]);
+  });
+});
+
+describe('getPairStats', () => {
+  it('returns an empty array when no records exist', async () => {
+    const db = makeEmptyDb();
+    const result = await getPairStats(db);
+    expect(result).toEqual([]);
   });
 });
