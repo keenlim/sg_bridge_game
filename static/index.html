@@ -33,6 +33,9 @@
       <p class="subtitle">Singaporean Card Game</p>
 
       <div id="leaderboard-section"></div>
+      <div class="stats-link-bar">
+        <button class="btn-link" onclick="showStats()">📊 Full stats →</button>
+      </div>
 
       <!-- Telegram login section (shown when not logged in) -->
       <div id="login-section">
@@ -177,6 +180,33 @@
       <h2>👁 Choose who to watch</h2>
       <p class="subtitle">Pick a player — you can't switch until the game ends.</p>
       <div id="spectator-grid" class="spectator-grid"></div>
+    </div>
+  </div>
+
+  <!-- Stats screen -->
+  <div id="screen-stats" class="screen hidden">
+    <div class="stats-container">
+      <div class="stats-topbar">
+        <span class="stats-title">📊 Bridge Stats</span>
+        <div class="stats-topbar-right">
+          <select id="stats-group-select" class="stats-group-select"></select>
+          <button class="btn-link" onclick="showScreen('screen-home')">← Home</button>
+        </div>
+      </div>
+      <div class="stats-tabs">
+        <button class="stats-tab active" id="stats-tab-players" onclick="switchStatsTab('players')">Players</button>
+        <button class="stats-tab" id="stats-tab-pairs" onclick="switchStatsTab('pairs')">Pairs</button>
+      </div>
+      <div class="stats-filter-bar">
+        <span class="stats-filter-label">Min games:</span>
+        <div class="min-games-filter">
+          <button class="min-games-btn active" data-value="3" onclick="setMinGames(3)">3</button>
+          <button class="min-games-btn" data-value="10" onclick="setMinGames(10)">10</button>
+          <button class="min-games-btn" data-value="20" onclick="setMinGames(20)">20</button>
+        </div>
+      </div>
+      <div id="stats-content"></div>
+      <p class="stats-footer">Stats tracked from first deployment of this feature · Historical games not included</p>
     </div>
   </div>
 
