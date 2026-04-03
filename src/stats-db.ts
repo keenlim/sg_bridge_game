@@ -165,8 +165,8 @@ export async function getPlayerStats(db: D1Database, groupId?: string): Promise<
 }
 
 export async function getPairStats(db: D1Database, groupId?: string): Promise<PairStatRow[]> {
-  const where = groupId ? 'WHERE gr1.group_id = ?' : '';
-  const bindings: string[] = groupId ? [groupId] : [];
+  const where = groupId ? 'WHERE gr1.group_id = ? AND gr2.group_id = ?' : '';
+  const bindings: string[] = groupId ? [groupId, groupId] : [];
 
   const rows = await db
     .prepare(
