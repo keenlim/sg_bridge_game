@@ -247,7 +247,7 @@ function renderPlayersTab(rows, minGames, sort) {
       <td class="stats-td-num">${fmtPct(r.bidder.winPct, r.bidder.games)}</td>
       <td class="stats-td-num">${fmtPct(r.partner.winPct, r.partner.games)}</td>
       <td class="stats-td-num">${fmtPct(r.opposition.winPct, r.opposition.games)}</td>
-      <td class="stats-td-num">${r.favBidSuit ?? '<span class="stats-na">—</span>'}</td>
+      <td class="stats-td-num">${r.favBidSuit ? esc(r.favBidSuit) : '<span class="stats-na">—</span>'}</td>
     </tr>`;
   }).join('');
 
@@ -301,7 +301,7 @@ function renderPairsTab(rows, minGames, sort) {
 
   content.innerHTML = `<div class="stats-table-wrap"><table class="stats-table">
     <thead><tr>
-      ${th('name', 'Teammates', true)}
+      <th class="stats-th-left">Teammates</th>
       ${th('games', 'G', false)}
       ${th('winPct', 'Win%', false)}
     </tr></thead>
