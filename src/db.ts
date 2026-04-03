@@ -125,7 +125,7 @@ export async function upsertGroup(
 ): Promise<void> {
   await db
     .prepare(
-      'INSERT OR REPLACE INTO groups (group_id, group_name, created_at) VALUES (?, ?, ?)',
+      'INSERT INTO groups (group_id, group_name, created_at) VALUES (?, ?, ?) ON CONFLICT(group_id) DO UPDATE SET group_name = excluded.group_name',
     )
     .bind(groupId, groupName, Math.floor(Date.now() / 1000))
     .run();
