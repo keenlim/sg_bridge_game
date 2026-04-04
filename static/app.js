@@ -891,6 +891,7 @@ function renderState() {
 
 // --- Lobby ---
 function renderLobby(s) {
+  renderSpectatorBar(s);
   $('lobby-room-code').textContent = s.roomCode;
   const list = $('lobby-players');
   list.innerHTML = '';
