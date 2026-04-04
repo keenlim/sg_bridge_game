@@ -101,12 +101,19 @@ html, body {
 
 /* --- Spectator bar --- */
 .spectator-bar {
+  position: fixed;
+  top: 44px;
+  left: 0;
+  right: 0;
+  z-index: 850;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.5rem;
   padding: 0.25rem 1rem;
-  background: rgba(0,0,0,0.25);
+  background: rgba(15,17,23,0.85);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   font-size: 0.75rem;
 }
 .spectator-tag {
@@ -118,6 +125,9 @@ html, body {
 .seat-spectator-eye {
   font-size: 0.7rem;
   line-height: 1;
+}
+body.has-spectators .screen {
+  padding-top: 76px;
 }
 
 /* --- Overlay --- */
