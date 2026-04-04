@@ -700,6 +700,13 @@ function handleMessage(msg) {
     case 'gameOver':
       lastGameOver = msg;
       break;
+    case 'kicked':
+      alert(msg.reason || 'You were removed from the room.');
+      leaveGame();
+      break;
+    case 'playerKicked':
+      // State update follows from the server's broadcastFullState — no manual action needed
+      break;
     case 'playerDisconnected':
       showConnectionToast(`${msg.name} disconnected`);
       if (gameState) {
@@ -897,17 +904,39 @@ function renderLobby(s) {
     const notRankedBadge = (s.groupId && p.isGroupMember === false && !p.isBot)
       ? '<span class="not-ranked-badge">⚠️ not ranked</span>'
       : '';
-    const isLastBot = p.isBot && p.seat === s.players.length - 1;
-    const removeBtn = (isHost && isLastBot)
-      ? `<button class="bot-remove-btn" onclick="send({type:'removeBot'})">✕</button>`
+    const kickBtn = (isHost && p.seat !== 0)
+      ? `<button class="kick-btn" onclick="send({type:'kickPlayer',seat:${p.seat}})">✕</button>`
       : '';
-    item.innerHTML = `<span class="seat-num">${p.seat + 1}</span>${statusDot(p.connected)}${botIcon}<span class="lobby-player-name">${esc(p.name)}</span>${statsHtml}${notRankedBadge}${removeBtn}`;
+    item.innerHTML = `<span class="seat-num">${p.seat + 1}</span>${statusDot(p.connected)}${botIcon}<span class="lobby-player-name">${esc(p.name)}</span>${statsHtml}${notRankedBadge}${kickBtn}`;
     list.appendChild(item);
   }
   const remaining = NUM_PLAYERS - s.players.length;
-  $('lobby-status').textContent = remaining > 0
-    ? `Waiting for ${remaining} more player(s)...`
-    : 'Game starting...';
+
+  const countdownEl = $('lobby-countdown');
+  const startBtn = $('lobby-start-btn');
+  const statusEl = $('lobby-status');
+
+  if (remaining === 0 && s.gameStartAt) {
+    const secsLeft = Math.max(0, Math.ceil((s.gameStartAt - Date.now()) / 1000));
+    countdownEl.textContent = `Game starting in ${secsLeft}...`;
+    countdownEl.classList.remove('hidden');
+    statusEl.classList.add('hidden');
+    if (isHost) {
+      startBtn.classList.remove('hidden');
+    } else {
+      startBtn.classList.add('hidden');
+    }
+    if (secsLeft > 0) {
+      setTimeout(() => { if (gameState && gameState.phase === 'lobby') renderLobby(gameState); }, 500);
+    }
+  } else {
+    countdownEl.classList.add('hidden');
+    startBtn.classList.add('hidden');
+    statusEl.classList.remove('hidden');
+    statusEl.textContent = remaining > 0
+      ? `Waiting for ${remaining} more player(s)...`
+      : 'Game starting...';
+  }
 
   const addBotBtn = $('lobby-add-bot');
   if (addBotBtn) {
