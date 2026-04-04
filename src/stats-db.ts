@@ -1,6 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { Player } from './types';
 import { BID_SUITS } from './types';
+import { computeEloDeltas } from './elo';
+import type { EloPlayer } from './elo';
 
 export interface PlayerStatRow {
   telegramId: number;
@@ -198,4 +200,72 @@ export async function getPairStats(db: D1Database, groupId?: string): Promise<Pa
     wins: r.wins,
     winPct: r.win_pct,
   }));
+}
+
+/**
+ * Computes pair ELO deltas after a game and updates users.elo + elo_history.
+ * Only authenticated players (tg_ IDs) are included. Guests and bots are skipped.
+ * All DB writes are batched in a single db.batch() call.
+ */
+export async function recordEloUpdate(
+  db: D1Database,
+  gameId: string,
+  players: Player[],
+  bidderSeat: number,
+  partnerSeat: number,
+  winnerSeats: number[],
+): Promise<void> {
+  const authPlayers = players.filter((p) => p.id.startsWith('tg_'));
+  if (authPlayers.length < 2) return;
+
+  const telegramIds = authPlayers.map((p) => Number(p.id.slice(3)));
+  const placeholders = telegramIds.map(() => '?').join(',');
+  const userRows = await db
+    .prepare(`SELECT telegram_id, elo, games_played FROM users WHERE telegram_id IN (${placeholders})`)
+    .bind(...telegramIds)
+    .all<{ telegram_id: number; elo: number; games_played: number }>();
+
+  const userMap = new Map(
+    (userRows.results ?? []).map((r) => [r.telegram_id, r]),
+  );
+
+  const seatToPlayer = new Map<number, EloPlayer>();
+  for (const p of authPlayers) {
+    const tgId = Number(p.id.slice(3));
+    const row = userMap.get(tgId);
+    if (row) seatToPlayer.set(p.seat, { telegramId: tgId, elo: row.elo, gamesPlayed: row.games_played });
+  }
+
+  const isSoloBid = bidderSeat === partnerSeat;
+  const bidderTeamSeats = isSoloBid ? [bidderSeat] : [bidderSeat, partnerSeat];
+  const oppTeamSeats = [0, 1, 2, 3].filter((s) => !bidderTeamSeats.includes(s));
+
+  const teamA = bidderTeamSeats.map((s) => seatToPlayer.get(s)).filter(Boolean) as EloPlayer[];
+  const teamB = oppTeamSeats.map((s) => seatToPlayer.get(s)).filter(Boolean) as EloPlayer[];
+
+  if (teamA.length === 0 || teamB.length === 0) return;
+
+  const teamAWon = winnerSeats.includes(bidderSeat);
+  const deltas = computeEloDeltas(teamA, teamB, teamAWon);
+
+  const playedAt = Math.floor(Date.now() / 1000);
+  const allPlayers = [...teamA, ...teamB];
+
+  const stmts = allPlayers.flatMap((player) => {
+    const delta = deltas.get(player.telegramId) ?? 0;
+    const newElo = player.elo + delta;
+    return [
+      db
+        .prepare('UPDATE users SET elo = ? WHERE telegram_id = ?')
+        .bind(newElo, player.telegramId),
+      db
+        .prepare(
+          `INSERT INTO elo_history (game_id, telegram_id, elo_before, elo_after, delta, played_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(gameId, player.telegramId, player.elo, newElo, delta, playedAt),
+    ];
+  });
+
+  await db.batch(stmts);
 }
