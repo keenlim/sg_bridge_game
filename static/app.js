@@ -953,9 +953,30 @@ function renderLobby(s) {
   }
 }
 
+const SPECTATOR_COLORS = ['#06b6d4','#f97316','#a3e635','#f43f5e','#a855f7','#facc15'];
+
+function renderSpectatorBar(s) {
+  const bar = $('spectator-bar');
+  if (!bar) return;
+  const specs = s.spectators ?? [];
+  if (specs.length === 0) {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    document.body.classList.remove('has-spectators');
+    return;
+  }
+  bar.classList.remove('hidden');
+  document.body.classList.add('has-spectators');
+  bar.innerHTML = specs.map((sp, i) => {
+    const color = SPECTATOR_COLORS[i % SPECTATOR_COLORS.length];
+    return `<span class="spectator-tag" style="color:${color}">👁 ${esc(sp.name)}</span>`;
+  }).join('');
+}
+
 // --- Bidding ---
 function renderBidding(s) {
   renderPlayerStatusBar($('bidding-players'), s.players);
+  renderSpectatorBar(s);
   const isMyTurn = s.turn === s.mySeat;
   $('bid-status').textContent = s.isSpectator
     ? `👁 Watching: ${s.players[s.watchingSeat]?.name || '?'}`
@@ -1002,6 +1023,7 @@ function renderBidding(s) {
 // --- Partner selection ---
 function renderPartner(s) {
   renderPlayerStatusBar($('partner-players'), s.players);
+  renderSpectatorBar(s);
   const isBidder = s.mySeat === s.bidder;
   $('partner-title').textContent = isBidder ? 'Select Partner Card' : 'Partner Selection';
   $('partner-status').textContent = isBidder
@@ -1029,6 +1051,7 @@ function renderPartner(s) {
 
 // --- Play ---
 function renderPlay(s) {
+  renderSpectatorBar(s);
   // Info bar
   if (s.bid >= 0 && s.bidder >= 0) {
     $('play-bid-info').textContent = `Bid: ${s.players[s.bidder].name} - ${getBidFromNum(s.bid)}`;
@@ -1164,6 +1187,7 @@ function sendWatchSeat(seat) {
 // --- Game Over ---
 function renderGameOver(s) {
   renderPlayerStatusBar($('gameover-players'), s.players);
+  renderSpectatorBar(s);
   const title = $('gameover-title');
   const detail = $('gameover-detail');
   const scores = $('gameover-scores');
