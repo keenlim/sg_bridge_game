@@ -138,6 +138,12 @@ export class GameRoom extends DurableObject {
       case 'removeBot':
         await this.handleRemoveBot(state, session.playerId);
         break;
+      case 'kickPlayer':
+        await this.handleKickPlayer(state, session.playerId, msg.seat);
+        break;
+      case 'startGame':
+        await this.handleStartGame(state, session.playerId);
+        break;
     }
   }
 
@@ -1262,5 +1268,53 @@ export class GameRoom extends DurableObject {
 
     await this.saveState(state);
     this.broadcastFullState(state);
+  }
+
+  private async handleKickPlayer(state: GameState, requestorId: string, targetSeat: number): Promise<void> {
+    if (state.phase !== 'lobby') return;
+    const requestor = state.players.find((p) => p.id === requestorId);
+    if (!requestor || requestor.seat !== 0) return;
+    if (targetSeat === 0) return;
+    const target = state.players.find((p) => p.seat === targetSeat);
+    if (!target) return;
+
+    // Notify and close the kicked player's WebSocket
+    for (const [ws, info] of this.sessions) {
+      if (info.playerId === target.id) {
+        try {
+          ws.send(JSON.stringify({ type: 'kicked', reason: 'You were removed by the host.' }));
+          ws.close(1000, 'Kicked by host');
+        } catch { /* already closed */ }
+        this.sessions.delete(ws);
+        break;
+      }
+    }
+
+    const kickedName = target.name;
+    const kickedSeat = target.seat;
+
+    // Remove kicked player and re-index seats
+    state.players = state.players.filter((p) => p.seat !== targetSeat);
+    state.players.forEach((p, i) => { p.seat = i; });
+
+    // Cancel countdown if active
+    if (state.gameStartAt !== null) {
+      state.gameStartAt = null;
+      await this.ctx.storage.deleteAlarm();
+    }
+
+    this.broadcast({ type: 'playerKicked', seat: kickedSeat, name: kickedName });
+    await this.saveState(state);
+    this.broadcastFullState(state);
+  }
+
+  private async handleStartGame(state: GameState, requestorId: string): Promise<void> {
+    if (state.phase !== 'lobby') return;
+    const requestor = state.players.find((p) => p.id === requestorId);
+    if (!requestor || requestor.seat !== 0) return;
+    if (state.players.length !== NUM_PLAYERS) return;
+
+    await this.ctx.storage.deleteAlarm();
+    await this.startGameFromLobby(state);
   }
 }
