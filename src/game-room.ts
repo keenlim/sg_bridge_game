@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import type { GameState, PlayerGameView, Suit, Hand, Env, TrickRecord, BidHistoryEntry, Spectator } from './types';
+import type { GameState, PlayerGameView, Suit, Hand, Env, TrickRecord, BidHistoryEntry, Spectator, TrickLogEntry } from './types';
 import { NUM_PLAYERS, MAX_BID, CARD_SUITS, BID_SUITS } from './types';
 import { generateHands, getBidFromNum, getNumFromBid, getValidSuits, compareCards, getNumFromValue } from './bridge';
 import type { ClientMessage, ServerMessage } from './protocol';
@@ -236,6 +236,8 @@ export class GameRoom extends DurableObject {
       partnerRevealed: false,
       gameId: crypto.randomUUID(),
       readySeats: [],
+      trickLog: [],
+      initialHands: [],
     };
   }
 
@@ -292,6 +294,12 @@ export class GameRoom extends DurableObject {
       partnerSeat: state.partnerRevealed ? state.partner : -1,
       spectators: state.spectators.map((sp) => ({ name: sp.name, watchingSeat: sp.watchingSeat })),
       readySeats: state.readySeats,
+      allInitialHands: state.phase === 'gameover' && state.initialHands.length > 0
+        ? state.initialHands
+        : null,
+      allFinalHands: state.phase === 'gameover' && state.initialHands.length > 0
+        ? state.hands
+        : null,
     };
     return { type: 'state', state: view };
   }
@@ -1238,6 +1246,13 @@ export class GameRoom extends DurableObject {
     state.lastTrick = null;
     state.trickComplete = false;
     state.bidHistory = [];
+    state.trickLog = [];
+    state.initialHands = state.hands.map((h) => ({
+      '♣': [...h['♣']],
+      '♦': [...h['♦']],
+      '♥': [...h['♥']],
+      '♠': [...h['♠']],
+    }));
     await this.saveState(state);
     this.broadcast({ type: 'gameStart', turn: state.firstBidder });
     this.broadcastFullState(state);
