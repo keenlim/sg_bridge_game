@@ -128,7 +128,7 @@ async function renderGroupLeaderboard(groupId) {
 async function showStats() {
   showScreen('screen-stats');
   statsTab = 'players';
-  statsSort = { col: 'winPct', dir: 'desc' };
+  statsSort = { col: 'elo', dir: 'desc' };
   $('stats-tab-players')?.classList.add('active');
   $('stats-tab-pairs')?.classList.remove('active');
   await loadStats();
@@ -212,6 +212,7 @@ function renderPlayersTab(rows, minGames, sort) {
   const filtered = rows.filter((r) => r.games >= minGames);
 
   const sortFns = {
+    elo:              (r) => r.elo,
     winPct:           (r) => r.winPct,
     games:            (r) => r.games,
     bidderWinPct:     (r) => r.bidder.winPct,
@@ -246,6 +247,7 @@ function renderPlayersTab(rows, minGames, sort) {
     const medal = i < 3 ? medals[i] : `${i + 1}.`;
     return `<tr>
       <td class="stats-td-name">${medal} ${esc(r.displayName)}</td>
+      <td class="stats-td-num stats-elo">${r.elo}</td>
       <td class="stats-td-num">${r.games}</td>
       <td class="stats-td-num">${fmtPct(r.winPct, r.games)}</td>
       <td class="stats-td-num">${fmtPct(r.bidder.winPct, r.bidder.games)}</td>
@@ -258,6 +260,7 @@ function renderPlayersTab(rows, minGames, sort) {
   content.innerHTML = `<div class="stats-table-wrap"><table class="stats-table">
     <thead><tr>
       ${th('name', 'Player', true)}
+      ${th('elo', 'ELO', false)}
       ${th('games', 'G', false)}
       ${th('winPct', 'Win%', false)}
       ${th('bidderWinPct', 'Bid%', false)}

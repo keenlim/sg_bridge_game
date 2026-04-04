@@ -1295,6 +1295,10 @@ html, body {
   font-family: var(--mono);
   white-space: nowrap;
 }
+.stats-elo {
+  color: #d4a843;
+  font-weight: 600;
+}
 .sort-arrow { font-size: 0.6rem; margin-left: 2px; color: #555; }
 .sort-arrow.active { color: var(--accent-light); }
 .win-pct-high { color: #4ade80; font-weight: 700; }
