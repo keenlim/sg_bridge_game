@@ -163,7 +163,7 @@ export class GameRoom extends DurableObject {
     }
 
     const anyConnected = state.players.some((p) => p.connected);
-    if (!anyConnected) {
+    if (!anyConnected && !state.gameStartAt) {
       await this.ctx.storage.setAlarm(Date.now() + 5 * 60 * 1000);
     }
   }
@@ -175,6 +175,24 @@ export class GameRoom extends DurableObject {
   async alarm(): Promise<void> {
     const state = await this.getState();
     if (!state) return;
+
+    // Countdown alarm — auto-start game when 5 seconds elapse
+    if (state.gameStartAt !== null && Date.now() >= state.gameStartAt - 100) {
+      state.gameStartAt = null;
+      if (state.phase === 'lobby' && state.players.length === NUM_PLAYERS) {
+        const anyConnected = state.players.some((p) => p.connected);
+        if (anyConnected) {
+          await this.startGameFromLobby(state);
+          return;
+        }
+      }
+      // Countdown fired but couldn't start — schedule cleanup
+      await this.saveState(state);
+      await this.ctx.storage.setAlarm(Date.now() + 5 * 60 * 1000);
+      return;
+    }
+
+    // Inactivity cleanup alarm
     const anyConnected = state.players.some((p) => p.connected);
     if (!anyConnected) {
       await this.ctx.storage.deleteAll();
@@ -208,6 +226,7 @@ export class GameRoom extends DurableObject {
       spectators: [],
       firstBidder: 0,
       groupId,
+      gameStartAt: null,
     };
   }
 
@@ -259,6 +278,7 @@ export class GameRoom extends DurableObject {
       watchingSeat,
       groupId: state.groupId,
       isGroupMember: player?.isGroupMember,
+      gameStartAt: state.gameStartAt,
     };
     return { type: 'state', state: view };
   }
@@ -338,6 +358,11 @@ export class GameRoom extends DurableObject {
     name: string,
     ws: WebSocket,
   ): Promise<void> {
+    if (!playerId.startsWith('tg_')) {
+      ws.send(JSON.stringify({ type: 'error', message: 'You must log in with Telegram to play.' }));
+      return;
+    }
+
     const existing = state.players.find((p) => p.id === playerId);
     if (existing) {
       existing.name = name;
@@ -400,29 +425,11 @@ export class GameRoom extends DurableObject {
     });
 
     if (state.players.length === NUM_PLAYERS) {
-      state.phase = 'bidding';
-      state.hands = generateHands();
-      state.turn = state.firstBidder;
-      state.bidder = -1;
-      state.bid = -1;
-      state.passCount = 0;
-      await this.saveState(state);
-
-      this.broadcast({ type: 'gameStart', turn: state.firstBidder });
-      this.broadcastFullState(state);
-      if (state.groupId) {
-        const names = state.players.map((p) => p.name).join(', ');
-        sendMessage(
-          (this.env as Env).TELEGRAM_BOT_TOKEN,
-          state.groupId,
-          `🎮 Game started!\nPlayers: ${names}`,
-        ).catch(() => {});
-      }
-      this.ctx.waitUntil(this.scheduleBotAction());
-    } else {
-      await this.saveState(state);
-      this.broadcastFullState(state);
+      state.gameStartAt = Date.now() + 5000;
+      await this.ctx.storage.setAlarm(state.gameStartAt);
     }
+    await this.saveState(state);
+    this.broadcastFullState(state);
   }
 
   private async handleBid(
@@ -1181,6 +1188,28 @@ export class GameRoom extends DurableObject {
     return 'A ♠';
   }
 
+  private async startGameFromLobby(state: GameState): Promise<void> {
+    state.gameStartAt = null;
+    state.phase = 'bidding';
+    state.hands = generateHands();
+    state.turn = state.firstBidder;
+    state.bidder = -1;
+    state.bid = -1;
+    state.passCount = 0;
+    await this.saveState(state);
+    this.broadcast({ type: 'gameStart', turn: state.firstBidder });
+    this.broadcastFullState(state);
+    if (state.groupId) {
+      const names = state.players.map((p) => p.name).join(', ');
+      sendMessage(
+        (this.env as Env).TELEGRAM_BOT_TOKEN,
+        state.groupId,
+        `🎮 Game started!\nPlayers: ${names}`,
+      ).catch(() => {});
+    }
+    this.ctx.waitUntil(this.scheduleBotAction());
+  }
+
   private async handleAddBot(state: GameState, playerId: string): Promise<void> {
     if (state.phase !== 'lobby') return;
     const requestor = state.players.find((p) => p.id === playerId);
@@ -1207,28 +1236,11 @@ export class GameRoom extends DurableObject {
     });
 
     if (state.players.length === NUM_PLAYERS) {
-      state.phase = 'bidding';
-      state.hands = generateHands();
-      state.turn = state.firstBidder;
-      state.bidder = -1;
-      state.bid = -1;
-      state.passCount = 0;
-      await this.saveState(state);
-      this.broadcast({ type: 'gameStart', turn: state.firstBidder });
-      this.broadcastFullState(state);
-      if (state.groupId) {
-        const names = state.players.map((p) => p.name).join(', ');
-        sendMessage(
-          (this.env as Env).TELEGRAM_BOT_TOKEN,
-          state.groupId,
-          `🎮 Game started!\nPlayers: ${names}`,
-        ).catch(() => {});
-      }
-      this.ctx.waitUntil(this.scheduleBotAction());
-    } else {
-      await this.saveState(state);
-      this.broadcastFullState(state);
+      state.gameStartAt = Date.now() + 5000;
+      await this.ctx.storage.setAlarm(state.gameStartAt);
     }
+    await this.saveState(state);
+    this.broadcastFullState(state);
   }
 
   private async handleRemoveBot(state: GameState, playerId: string): Promise<void> {
