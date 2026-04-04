@@ -235,6 +235,7 @@ export class GameRoom extends DurableObject {
       gameStartAt: null,
       partnerRevealed: false,
       gameId: crypto.randomUUID(),
+      readySeats: [],
     };
   }
 
@@ -290,6 +291,7 @@ export class GameRoom extends DurableObject {
       gameStartAt: state.gameStartAt,
       partnerSeat: state.partnerRevealed ? state.partner : -1,
       spectators: state.spectators.map((sp) => ({ name: sp.name, watchingSeat: sp.watchingSeat })),
+      readySeats: state.readySeats,
     };
     return { type: 'state', state: view };
   }
@@ -724,6 +726,7 @@ export class GameRoom extends DurableObject {
 
       if (bidderSets >= state.setsNeeded) {
         state.phase = 'gameover';
+        state.readySeats = [];
         const winnerNames =
           partner === bidder
             ? [state.players[bidder].name]
@@ -783,6 +786,7 @@ export class GameRoom extends DurableObject {
 
       if (opponentSets >= 14 - state.setsNeeded) {
         state.phase = 'gameover';
+        state.readySeats = [];
         const winnerNames = state.players
           .filter((_, i) => i !== bidder && i !== partner)
           .map((p) => p.name);

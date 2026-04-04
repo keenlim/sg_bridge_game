@@ -66,6 +66,7 @@ export interface GameState {
   gameStartAt: number | null;
   partnerRevealed: boolean;
   gameId: string;
+  readySeats: number[];
 }
 
 export interface PlayerGameView {
@@ -96,6 +97,7 @@ export interface PlayerGameView {
   isGroupMember?: boolean;
   partnerSeat: number;
   spectators: { name: string; watchingSeat: number }[];
+  readySeats: number[];
 }
 
 export interface Env {
