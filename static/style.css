@@ -1056,6 +1056,13 @@ html, body {
   flex-shrink: 0;
 }
 
+.lb-elo {
+  font-weight: 700;
+  color: #d4a843;
+  min-width: 3.5rem;
+  text-align: right;
+}
+
 .lb-me .lb-name {
   font-weight: 600;
   color: #fff;

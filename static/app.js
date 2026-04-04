@@ -76,6 +76,7 @@ function renderLeaderboard(data) {
     `<div class="lb-row">
       <span class="lb-rank">${medals[e.rank - 1] || '#' + e.rank}</span>
       <span class="lb-name">${esc(e.displayName)}</span>
+      <span class="lb-elo">${e.elo}</span>
       <span class="lb-stats">${e.wins}W / ${e.gamesPlayed}G</span>
     </div>`
   ).join('');
@@ -84,6 +85,7 @@ function renderLeaderboard(data) {
     <div class="lb-row lb-me">
       <span class="lb-rank">#${data.me.rank}</span>
       <span class="lb-name">You</span>
+      <span class="lb-elo">${data.me.elo}</span>
       <span class="lb-stats">${data.me.wins}W / ${data.me.gamesPlayed}G</span>
     </div>`;
   }
@@ -104,6 +106,7 @@ async function renderGroupLeaderboard(groupId) {
       `<div class="lb-row">
         <span class="lb-rank">${medals[e.rank - 1] || '#' + e.rank}</span>
         <span class="lb-name">${esc(e.displayName)}</span>
+        <span class="lb-elo">${e.elo}</span>
         <span class="lb-stats">${e.wins}W / ${e.gamesPlayed}G</span>
       </div>`
     ).join('');
@@ -112,6 +115,7 @@ async function renderGroupLeaderboard(groupId) {
       <div class="lb-row lb-me">
         <span class="lb-rank">#${data.me.rank}</span>
         <span class="lb-name">You</span>
+        <span class="lb-elo">${data.me.elo}</span>
         <span class="lb-stats">${data.me.wins}W / ${data.me.gamesPlayed}G</span>
       </div>`;
     }
