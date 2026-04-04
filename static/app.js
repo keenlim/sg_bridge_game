@@ -973,8 +973,8 @@ function renderBidding(s) {
   if (histEl && s.bidHistory && s.bidHistory.length > 0) {
     histEl.innerHTML = s.bidHistory.slice().reverse().map(e =>
       e.bidNum === null
-        ? `<div class="bid-hist-row bid-hist-pass"><span class="bid-hist-name">${esc(e.name)}</span><span class="bid-hist-val">Pass</span></div>`
-        : `<div class="bid-hist-row"><span class="bid-hist-name">${esc(e.name)}</span><span class="bid-hist-val">${getBidFromNum(e.bidNum)}</span></div>`
+        ? `<div class="bid-hist-row bid-hist-pass"><span class="bid-hist-name">${esc(e.name)}</span><span class="bid-hist-dash"> - </span><span class="bid-hist-val">Pass</span></div>`
+        : `<div class="bid-hist-row"><span class="bid-hist-name">${esc(e.name)}</span><span class="bid-hist-dash"> - </span><span class="bid-hist-val">${getBidFromNum(e.bidNum)}</span></div>`
     ).join('');
   } else if (histEl) {
     histEl.innerHTML = '';
@@ -1064,7 +1064,7 @@ function renderPlay(s) {
         ? '<span class="partner-star">★</span>'
         : '';
       const sets = s.sets?.[seat] ?? 0;
-      label.innerHTML = `<span class="seat-name-row">${bidderStar}${statusDot(player.connected)}<span class="seat-name">${esc(player.name)}</span>${partnerStar}</span><span class="seat-sets">${sets}</span>`;
+      label.innerHTML = `<span class="seat-name-row">${bidderStar}${partnerStar}${statusDot(player.connected)}<span class="seat-name">${esc(player.name)}</span></span><span class="seat-sets">${sets}</span>`;
       label.className = 'seat-label';
       if (seat === s.turn) {
         label.classList.add('active-turn');
