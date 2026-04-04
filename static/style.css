@@ -885,6 +885,21 @@ body.has-spectators .screen {
 .gameover-actions .btn-ghost {
   font-size: 0.85rem; padding: 0.6rem;
 }
+.gameover-ready-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+}
+.gameover-ready-player {
+  color: var(--text-dimmer);
+}
+.gameover-ready-player.ready {
+  color: #4ade80;
+  font-weight: 600;
+}
 
 /* --- Responsive --- */
 @media (max-width: 400px) {

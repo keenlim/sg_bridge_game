@@ -37,6 +37,7 @@ let gameState = null;
 let lastGameOver = null;
 let prevTurn = -1;
 let lobbyCountdownTimer = null;
+let gameoverCountdownTimer = null;
 
 // Stats state
 let statsData = { players: [], pairs: [] };
@@ -857,6 +858,7 @@ function renderState() {
 
   switch (s.phase) {
     case 'lobby':
+      clearTimeout(gameoverCountdownTimer);
       showScreen('screen-lobby');
       renderLobby(s);
       break;
@@ -1257,6 +1259,44 @@ function renderGameOver(s) {
   if (groupLbEl) groupLbEl.innerHTML = '';
   if (s.groupId) {
     renderGroupLeaderboard(s.groupId);
+  }
+
+  // Ready list
+  const readySeats = s.readySeats ?? [];
+  const readyList = $('gameover-ready-list');
+  if (readyList) {
+    readyList.innerHTML = s.players.map((p) =>
+      `<span class="gameover-ready-player${readySeats.includes(p.seat) ? ' ready' : ''}">
+        ${readySeats.includes(p.seat) ? '✓' : '○'} ${esc(p.name)}
+      </span>`
+    ).join('');
+  }
+
+  // Play Again button state
+  const playAgainBtn = $('btn-play-again');
+  const iAmReady = !s.isSpectator && readySeats.includes(s.mySeat);
+  if (playAgainBtn) {
+    playAgainBtn.disabled = iAmReady || s.isSpectator;
+    playAgainBtn.textContent = (iAmReady || s.isSpectator) ? 'Waiting...' : 'Play Again';
+  }
+
+  // Countdown (reuses same pattern as lobby)
+  const countdownEl = $('gameover-countdown');
+  if (countdownEl) {
+    if (s.gameStartAt) {
+      countdownEl.classList.remove('hidden');
+      clearTimeout(gameoverCountdownTimer);
+      const tick = () => {
+        const rem = Math.ceil((s.gameStartAt - Date.now()) / 1000);
+        if (rem <= 0) { countdownEl.textContent = 'Starting...'; return; }
+        countdownEl.textContent = `Starting in ${rem}s...`;
+        gameoverCountdownTimer = setTimeout(tick, 500);
+      };
+      tick();
+    } else {
+      countdownEl.classList.add('hidden');
+      clearTimeout(gameoverCountdownTimer);
+    }
   }
 }
 
