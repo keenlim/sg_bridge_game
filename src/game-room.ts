@@ -35,9 +35,22 @@ export class GameRoom extends DurableObject {
     const url = new URL(request.url);
 
     if (url.pathname === '/create' && request.method === 'POST') {
-      const { roomCode, groupId } = (await request.json()) as { roomCode: string; groupId?: string | null };
-      const state = this.createInitialState(roomCode, groupId ?? null);
+      const { roomCode, groupId, groupName } = (await request.json()) as { roomCode: string; groupId?: string | null; groupName?: string | null };
+      const state = this.createInitialState(roomCode, groupId ?? null, groupName ?? null);
       await this.ctx.storage.put('state', state);
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === '/send-group-invite' && request.method === 'POST') {
+      const { origin } = (await request.json()) as { origin: string };
+      const state = await this.getState();
+      if (state?.groupId) {
+        sendMessage(
+          (this.env as Env).TELEGRAM_BOT_TOKEN,
+          state.groupId,
+          `🃏 Join the game → ${origin}/#${state.roomCode}`,
+        ).catch(() => {});
+      }
       return Response.json({ ok: true });
     }
 
@@ -208,7 +221,7 @@ export class GameRoom extends DurableObject {
 
   // --- State helpers ---
 
-  private createInitialState(roomCode: string, groupId: string | null = null): GameState {
+  private createInitialState(roomCode: string, groupId: string | null = null, groupName: string | null = null): GameState {
     return {
       roomCode,
       phase: 'lobby',
@@ -233,6 +246,7 @@ export class GameRoom extends DurableObject {
       spectators: [],
       firstBidder: 0,
       groupId,
+      groupName,
       gameStartAt: null,
       partnerRevealed: false,
       gameId: crypto.randomUUID(),
@@ -290,6 +304,7 @@ export class GameRoom extends DurableObject {
       isSpectator,
       watchingSeat,
       groupId: state.groupId,
+      groupName: state.groupName,
       isGroupMember: player?.isGroupMember,
       gameStartAt: state.gameStartAt,
       partnerSeat: state.partnerRevealed ? state.partner : -1,

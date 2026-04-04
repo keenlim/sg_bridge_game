@@ -1,12 +1,9 @@
 # Next tasks
 
-## Telegram group integration
+## Lobby / UI
 
-- [ ] **Lobby: resend invite to the Telegram group**  
-  When the room was created from a Telegram group, show Telegram group info in the lobby. Next to the existing "share invite link" control, add an action like **Send link to Telegram group \<group name\>** that posts the invite link to that group again.
-
-- [ ] **Home: create game for a Telegram group**  
-  From the web app's create-game flow, add a separate control (e.g. **Create game for Telegram group \<group name\>**) that creates the game and automatically shares the invite link with that group (distinct from the normal "create game" path).
+- [ ] **Add Bot next to player list**  
+  Move the **Add Bot** control closer to the player list; keep clear spacing so it sits away from the **Waiting for players** line (visually grouped with slots, not with the status text).
 
 ---
 
