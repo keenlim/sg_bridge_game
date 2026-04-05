@@ -1439,23 +1439,15 @@ function renderGameOver(s) {
 
   togglePractice('gameover-practice-notice', s.isPractice);
 
-  // Determine which players are on the bidder's team
-  let bidderTeamNames = null;
-  if (lastGameOver && s.bidder >= 0) {
-    bidderTeamNames = new Set(
-      lastGameOver.bidderWon
-        ? lastGameOver.winnerNames
-        : s.players.map((p) => p.name).filter((n) => !lastGameOver.winnerNames.includes(n)),
-    );
-  }
-  const partnerSeat = bidderTeamNames
-    ? s.players.findIndex((p, idx) => idx !== s.bidder && bidderTeamNames.has(p.name))
-    : -1;
+  const partnerSeat = s.partnerSeat >= 0 ? s.partnerSeat : -1;
+  const bidderTeamSeats = new Set(
+    [s.bidder, partnerSeat].filter((seat) => seat >= 0),
+  );
 
   scores.innerHTML = '';
   for (let i = 0; i < s.players.length; i++) {
     const item = document.createElement('div');
-    const isBidderTeam = bidderTeamNames && bidderTeamNames.has(s.players[i].name);
+    const isBidderTeam = bidderTeamSeats.has(i);
     item.className = `score-item${isBidderTeam ? ' team-bidder' : ''}`;
     const roleBadge = i === s.bidder
       ? '<span class="role-badge">Bidder</span>'
