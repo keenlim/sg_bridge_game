@@ -1347,6 +1347,7 @@ function renderGameoverHands(s) {
           for (const value of (finalHand[suit] || [])) {
             const el = createCardEl(value, suit, { mini: true });
             el.classList.add('played');
+            if (`${value} ${suit}` === s.partnerCard) el.classList.add('card-partner-glow');
             cards.appendChild(makeWrap(el, false));
           }
         }
@@ -1360,6 +1361,7 @@ function renderGameoverHands(s) {
           const played = !finalSet.has(value);
           const el = createCardEl(value, suit, { mini: true });
           if (played) el.classList.add('played');
+          if (`${value} ${suit}` === s.partnerCard) el.classList.add('card-partner-glow');
           cards.appendChild(makeWrap(el, false));
         }
       }
