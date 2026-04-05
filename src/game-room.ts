@@ -308,7 +308,7 @@ export class GameRoom extends DurableObject {
       groupName: state.groupName,
       isGroupMember: player?.isGroupMember,
       gameStartAt: state.gameStartAt,
-      partnerSeat: state.partnerRevealed ? state.partner : -1,
+      partnerSeat: (state.partnerRevealed || state.phase === 'gameover') ? state.partner : -1,
       spectators: state.spectators.map((sp) => ({ name: sp.name, watchingSeat: sp.watchingSeat })),
       readySeats: state.readySeats,
       allInitialHands: state.phase === 'gameover' && state.initialHands.length > 0
