@@ -1028,6 +1028,11 @@ body.has-spectators .screen {
   margin-top: 1px;
   height: 0.6rem;
 }
+.gameover-hand-row .hand-label .hand-pts {
+  font-size: 0.6rem;
+  color: var(--text-dimmer);
+  margin-left: 0.35em;
+}
 .gameover-hand-row .hand-label .hand-role {
   font-size: 0.6rem;
   margin-left: 0.35em;
