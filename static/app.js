@@ -750,6 +750,9 @@ function handleMessage(msg) {
     case 'playerKicked':
       // State update follows from the server's broadcastFullState — no manual action needed
       break;
+    case 'chat':
+      appendChatMessage(msg.name, msg.text);
+      break;
     case 'playerDisconnected':
       showConnectionToast(`${msg.name} disconnected`);
       if (gameState) {
@@ -1038,6 +1041,35 @@ function renderLobby(s) {
     }
   }
 }
+
+// --- Lobby chat ---
+const CHAT_MAX_MESSAGES = 50;
+
+function appendChatMessage(name, text) {
+  const el = $('lobby-chat-messages');
+  if (!el) return;
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  div.innerHTML = `<span class="chat-name">${esc(name)}</span>${esc(text)}`;
+  el.appendChild(div);
+  // Keep at most CHAT_MAX_MESSAGES messages
+  while (el.children.length > CHAT_MAX_MESSAGES) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+function sendChat() {
+  const input = $('lobby-chat-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  send({ type: 'chat', text });
+  input.value = '';
+}
+
+$('lobby-chat-send').addEventListener('click', sendChat);
+$('lobby-chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+});
 
 const SPECTATOR_COLORS = ['#06b6d4','#f97316','#a3e635','#f43f5e','#a855f7','#facc15'];
 

@@ -12,7 +12,8 @@ export type ClientMessage =
   | { type: 'addBot'; level?: 'basic' | 'intermediate' | 'advanced' | 'sophisticated' }
   | { type: 'removeBot' }
   | { type: 'kickPlayer'; seat: number }
-  | { type: 'startGame' };
+  | { type: 'startGame' }
+  | { type: 'chat'; text: string };
 
 export type ServerMessage =
   | { type: 'state'; state: PlayerGameView }
@@ -32,4 +33,5 @@ export type ServerMessage =
   | { type: 'playerDisconnected'; seat: number; name: string }
   | { type: 'playerReconnected'; seat: number; name: string }
   | { type: 'kicked'; reason: string }
-  | { type: 'playerKicked'; seat: number; name: string };
+  | { type: 'playerKicked'; seat: number; name: string }
+  | { type: 'chat'; name: string; seat: number; text: string };
