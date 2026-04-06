@@ -161,6 +161,9 @@ export class GameRoom extends DurableObject {
       case 'startGame':
         await this.handleStartGame(state, session.playerId);
         break;
+      case 'chat':
+        this.handleChat(state, session.playerId, msg.text);
+        break;
     }
   }
 
@@ -2535,6 +2538,16 @@ export class GameRoom extends DurableObject {
     this.broadcast({ type: 'playerKicked', seat: leaverSeat, name: leaverName });
     await this.saveState(state);
     this.broadcastFullState(state);
+  }
+
+  private handleChat(state: GameState, playerId: string, text: string): void {
+    const player = state.players.find((p) => p.id === playerId);
+    const spectator = !player ? state.spectators.find((s) => s.id === playerId) : undefined;
+    const sender = player ?? spectator;
+    if (!sender) return;
+    const clean = String(text).trim().slice(0, 200);
+    if (!clean) return;
+    this.broadcast({ type: 'chat', name: sender.name, seat: player?.seat ?? -1, text: clean });
   }
 
   private async handleStartGame(state: GameState, requestorId: string): Promise<void> {
