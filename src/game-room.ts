@@ -16,6 +16,7 @@ interface SessionInfo {
 export class GameRoom extends DurableObject {
   sessions: Map<WebSocket, SessionInfo>;
   private botActionRunning = false;
+  private gameEndProcessed = new Set<string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -270,6 +271,15 @@ export class GameRoom extends DurableObject {
 
   private async saveState(state: GameState): Promise<void> {
     await this.ctx.storage.put('state', state);
+  }
+
+  /** Returns true if game_records already has rows for this gameId (idempotency guard). */
+  private async isGameAlreadyRecorded(gameId: string): Promise<boolean> {
+    const row = await (this.env as Env).DB
+      .prepare('SELECT 1 FROM game_records WHERE game_id = ? LIMIT 1')
+      .bind(gameId)
+      .first();
+    return !!row;
   }
 
   private buildStateMessage(state: GameState, playerId: string): ServerMessage {
@@ -795,72 +805,81 @@ export class GameRoom extends DurableObject {
           bidderWon: true,
           winnerNames,
         });
-        if (!isPracticeGame) await recordGameResult(
-          (this.env as Env).DB,
-          state.players,
-          getWinnerSeats(bidder, partner, true),
-        );
 
-        let eloResults: EloResult[] = [];
-        if (!isPracticeGame) {
-          await recordGameStats(
-            (this.env as Env).DB,
-            state.gameId,
-            state.groupId,
-            state.players,
-            bidder,
-            partner,
-            state.bid,
-            state.sets,
-            getWinnerSeats(bidder, partner, true),
-          );
-
-          eloResults = await recordEloUpdate(
-            (this.env as Env).DB,
-            state.gameId,
-            state.players,
-            bidder,
-            partner,
-            getWinnerSeats(bidder, partner, true),
-          );
-        }
-
-        if (state.groupId) {
-          const bidStr = getBidFromNum(state.bid);
-          const eloLines = eloResults.length > 0
-            ? '\n' + eloResults.map((r) => `  ${r.name}: ${r.delta >= 0 ? '+' : ''}${r.delta} → ${r.eloAfter}`).join('\n')
-            : '';
-          sendMessage(
-            (this.env as Env).TELEGRAM_BOT_TOKEN,
-            state.groupId,
-            `🏆 ${winnerNames.join(' & ')} won!\nBid ${bidStr}, made ${bidderSets}/${state.setsNeeded} tricks${isPracticeGame ? '\n(practice — unrated)' : eloLines}`,
-          ).catch(() => {});
-          if (!isPracticeGame) await recordGroupResult(
-            (this.env as Env).DB,
-            state.groupId,
-            state.players,
-            getWinnerSeats(bidder, partner, true),
-          );
-        }
-
-        this.ctx.waitUntil(
-          Promise.all([
-            updateGameFinalHands((this.env as Env).DB, state.gameId, state.players, state.hands),
-            insertGameTricks((this.env as Env).DB, state.gameId, state.trickLog),
-            insertGameMetadata(
+        // Idempotency guard: in-memory Set prevents same-instance races (synchronous, no TOCTOU),
+        // D1 check prevents duplicate processing across DO eviction/wake cycles
+        if (!this.gameEndProcessed.has(state.gameId)) {
+          this.gameEndProcessed.add(state.gameId);
+          const alreadyRecorded = await this.isGameAlreadyRecorded(state.gameId);
+          if (!alreadyRecorded) {
+            if (!isPracticeGame) await recordGameResult(
               (this.env as Env).DB,
-              state.gameId,
-              bidder,
-              state.bid,
-              state.trumpSuit,
-              state.partnerCard ?? '',
-              state.bidHistory,
               state.players,
-              state.sets,
-              'bidder',
-            ),
-          ]).catch(() => {}),
-        );
+              getWinnerSeats(bidder, partner, true),
+            );
+
+            let eloResults: EloResult[] = [];
+            if (!isPracticeGame) {
+              await recordGameStats(
+                (this.env as Env).DB,
+                state.gameId,
+                state.groupId,
+                state.players,
+                bidder,
+                partner,
+                state.bid,
+                state.sets,
+                getWinnerSeats(bidder, partner, true),
+              );
+
+              eloResults = await recordEloUpdate(
+                (this.env as Env).DB,
+                state.gameId,
+                state.players,
+                bidder,
+                partner,
+                getWinnerSeats(bidder, partner, true),
+              );
+            }
+
+            if (state.groupId) {
+              const bidStr = getBidFromNum(state.bid);
+              const eloLines = eloResults.length > 0
+                ? '\n' + eloResults.map((r) => `  ${r.name}: ${r.delta >= 0 ? '+' : ''}${r.delta} → ${r.eloAfter}`).join('\n')
+                : '';
+              sendMessage(
+                (this.env as Env).TELEGRAM_BOT_TOKEN,
+                state.groupId,
+                `🏆 ${winnerNames.join(' & ')} won!\nBid ${bidStr}, made ${bidderSets}/${state.setsNeeded} tricks${isPracticeGame ? '\n(practice — unrated)' : eloLines}`,
+              ).catch(() => {});
+              if (!isPracticeGame) await recordGroupResult(
+                (this.env as Env).DB,
+                state.groupId,
+                state.players,
+                getWinnerSeats(bidder, partner, true),
+              );
+            }
+
+            this.ctx.waitUntil(
+              Promise.all([
+                updateGameFinalHands((this.env as Env).DB, state.gameId, state.players, state.hands),
+                insertGameTricks((this.env as Env).DB, state.gameId, state.trickLog),
+                insertGameMetadata(
+                  (this.env as Env).DB,
+                  state.gameId,
+                  bidder,
+                  state.bid,
+                  state.trumpSuit,
+                  state.partnerCard ?? '',
+                  state.bidHistory,
+                  state.players,
+                  state.sets,
+                  'bidder',
+                ),
+              ]).catch(() => {}),
+            );
+          }
+        }
 
         await this.saveState(state);
         this.broadcastFullState(state);
@@ -879,72 +898,80 @@ export class GameRoom extends DurableObject {
           bidderWon: false,
           winnerNames,
         });
-        if (!isPracticeGame) await recordGameResult(
-          (this.env as Env).DB,
-          state.players,
-          getWinnerSeats(bidder, partner, false),
-        );
 
-        let eloResults: EloResult[] = [];
-        if (!isPracticeGame) {
-          await recordGameStats(
-            (this.env as Env).DB,
-            state.gameId,
-            state.groupId,
-            state.players,
-            bidder,
-            partner,
-            state.bid,
-            state.sets,
-            getWinnerSeats(bidder, partner, false),
-          );
-
-          eloResults = await recordEloUpdate(
-            (this.env as Env).DB,
-            state.gameId,
-            state.players,
-            bidder,
-            partner,
-            getWinnerSeats(bidder, partner, false),
-          );
-        }
-
-        if (state.groupId) {
-          const bidStr = getBidFromNum(state.bid);
-          const eloLines = eloResults.length > 0
-            ? '\n' + eloResults.map((r) => `  ${r.name}: ${r.delta >= 0 ? '+' : ''}${r.delta} → ${r.eloAfter}`).join('\n')
-            : '';
-          sendMessage(
-            (this.env as Env).TELEGRAM_BOT_TOKEN,
-            state.groupId,
-            `🛡️ ${winnerNames.join(' & ')} defended!\n${state.players[bidder].name}'s ${bidStr} bid failed${isPracticeGame ? '\n(practice — unrated)' : eloLines}`,
-          ).catch(() => {});
-          if (!isPracticeGame) await recordGroupResult(
-            (this.env as Env).DB,
-            state.groupId,
-            state.players,
-            getWinnerSeats(bidder, partner, false),
-          );
-        }
-
-        this.ctx.waitUntil(
-          Promise.all([
-            updateGameFinalHands((this.env as Env).DB, state.gameId, state.players, state.hands),
-            insertGameTricks((this.env as Env).DB, state.gameId, state.trickLog),
-            insertGameMetadata(
+        // Idempotency guard (same as bidder-win block above)
+        if (!this.gameEndProcessed.has(state.gameId)) {
+          this.gameEndProcessed.add(state.gameId);
+          const alreadyRecorded = await this.isGameAlreadyRecorded(state.gameId);
+          if (!alreadyRecorded) {
+            if (!isPracticeGame) await recordGameResult(
               (this.env as Env).DB,
-              state.gameId,
-              bidder,
-              state.bid,
-              state.trumpSuit,
-              state.partnerCard ?? '',
-              state.bidHistory,
               state.players,
-              state.sets,
-              'opponents',
-            ),
-          ]).catch(() => {}),
-        );
+              getWinnerSeats(bidder, partner, false),
+            );
+
+            let eloResults: EloResult[] = [];
+            if (!isPracticeGame) {
+              await recordGameStats(
+                (this.env as Env).DB,
+                state.gameId,
+                state.groupId,
+                state.players,
+                bidder,
+                partner,
+                state.bid,
+                state.sets,
+                getWinnerSeats(bidder, partner, false),
+              );
+
+              eloResults = await recordEloUpdate(
+                (this.env as Env).DB,
+                state.gameId,
+                state.players,
+                bidder,
+                partner,
+                getWinnerSeats(bidder, partner, false),
+              );
+            }
+
+            if (state.groupId) {
+              const bidStr = getBidFromNum(state.bid);
+              const eloLines = eloResults.length > 0
+                ? '\n' + eloResults.map((r) => `  ${r.name}: ${r.delta >= 0 ? '+' : ''}${r.delta} → ${r.eloAfter}`).join('\n')
+                : '';
+              sendMessage(
+                (this.env as Env).TELEGRAM_BOT_TOKEN,
+                state.groupId,
+                `🛡️ ${winnerNames.join(' & ')} defended!\n${state.players[bidder].name}'s ${bidStr} bid failed${isPracticeGame ? '\n(practice — unrated)' : eloLines}`,
+              ).catch(() => {});
+              if (!isPracticeGame) await recordGroupResult(
+                (this.env as Env).DB,
+                state.groupId,
+                state.players,
+                getWinnerSeats(bidder, partner, false),
+              );
+            }
+
+            this.ctx.waitUntil(
+              Promise.all([
+                updateGameFinalHands((this.env as Env).DB, state.gameId, state.players, state.hands),
+                insertGameTricks((this.env as Env).DB, state.gameId, state.trickLog),
+                insertGameMetadata(
+                  (this.env as Env).DB,
+                  state.gameId,
+                  bidder,
+                  state.bid,
+                  state.trumpSuit,
+                  state.partnerCard ?? '',
+                  state.bidHistory,
+                  state.players,
+                  state.sets,
+                  'opponents',
+                ),
+              ]).catch(() => {}),
+            );
+          }
+        }
 
         await this.saveState(state);
         this.broadcastFullState(state);
