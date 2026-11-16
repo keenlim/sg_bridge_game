@@ -939,9 +939,10 @@ $('btn-mark').addEventListener('click', () => { if (selection && canGuess()) sen
 $('btn-end').addEventListener('click', async () => {
   const g = view?.game;
   if (!g || !canGuess()) return;
+  const revision = view.revision, turn = g.turn;
   const left = g.guessesLeft;
   if (await askConfirm({ title: 'End your turn?', body: `Your team still has ${left} ${left === 1 ? 'guess' : 'guesses'}. The other team will get the next clue.`, ok: 'End turn' })) {
-    if (view?.game?.id === g.id && canGuess()) { selection = null; send('endTurn'); }
+    if (view?.game?.id === g.id && view.revision === revision && view.game.turn === turn && canGuess()) { selection = null; send('endTurn'); }
   }
 });
 $('board').addEventListener('click', (event) => {

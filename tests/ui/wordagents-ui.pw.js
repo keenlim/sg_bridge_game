@@ -68,6 +68,56 @@ test('operative selects, reveals with the current revision, and a newer board ca
   await expect(page.locator('#btn-reveal')).toBeDisabled();
 });
 
+for (const change of ['new board revision', 'full turn cycle']) test(`end-turn confirmation rejects a stale ${change}`, async ({ page }) => {
+  const active = initial();
+  active.game.guessesMade = 1; active.game.guessesLeft = 2;
+  active.game.cards[0] = { ...active.game.cards[0], color: 'red', revealed: true };
+  active.game.remaining.red = 8;
+  await setup(page, active);
+  await page.locator('#btn-end').click();
+  await expect(page.locator('#modal-confirm')).toBeVisible();
+
+  const latest = structuredClone(active);
+  if (change === 'full turn cycle') {
+    for (const [turn, phase] of [['blue', 'clue'], ['blue', 'guess'], ['red', 'clue'], ['red', 'guess']]) {
+      latest.revision++;
+      Object.assign(latest.game, { turn, phase, clue: phase === 'clue' ? null : { word: 'TIDE', count: 2 }, guessesMade: phase === 'clue' ? 0 : 1, guessesLeft: phase === 'clue' ? 0 : 2 });
+      if (phase === 'guess') {
+        const index = turn === 'blue' ? 1 : 2;
+        latest.game.cards[index] = { ...latest.game.cards[index], color: turn, revealed: true };
+        latest.game.remaining[turn]--;
+      }
+      await push(page, latest);
+    }
+  } else {
+    latest.revision++;
+    latest.game.guessesMade++; latest.game.guessesLeft--;
+    latest.game.cards[1] = { ...latest.game.cards[1], color: 'red', revealed: true };
+    latest.game.remaining.red--;
+    await push(page, latest);
+  }
+
+  // The same round is again guessable by this operative: that alone is not consent.
+  expect(await page.evaluate(() => canGuess())).toBe(true);
+  await expect(page.locator('#btn-end')).toBeEnabled();
+  await page.locator('#confirm-ok').click();
+  await expect(page.locator('#modal-confirm')).toBeHidden();
+  expect((await frames(page)).filter((m) => m.type === 'endTurn')).toEqual([]);
+});
+
+test('end-turn confirmation accepts the same board after a presence update', async ({ page }) => {
+  const active = initial(); active.game.guessesMade = 1; active.game.guessesLeft = 2;
+  active.game.cards[0] = { ...active.game.cards[0], color: 'red', revealed: true }; active.game.remaining.red = 8;
+  await setup(page, active);
+  await page.locator('#btn-end').click();
+  await expect(page.locator('#modal-confirm')).toBeVisible();
+  const presence = structuredClone(active); presence.watchers = 2; presence.players[1].connected = false;
+  await push(page, presence);
+  await page.locator('#confirm-ok').click();
+  await expect(page.locator('#modal-confirm')).toBeHidden();
+  expect((await frames(page)).filter((m) => m.type === 'endTurn')).toEqual([{ type: 'endTurn', gameId: 'round1', revision: 1 }]);
+});
+
 test('marks are shared on the card, toggle from the dock and never change the revision', async ({ page }) => {
   await setup(page);
   await page.locator('.wa-card').nth(4).click();
