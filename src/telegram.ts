@@ -60,6 +60,8 @@ const ALIASES: Record<string, CommandName> = {
   newtaidigame: 'newtaidi',
   newconnect4: 'newconnect4',
   newconnect4game: 'newconnect4',
+  newwordagents: 'newwordagents',
+  newwordagentsgame: 'newwordagents',
   newomok: 'newomok',
   newomokgame: 'newomok',
   leaderboard: 'leaderboard',

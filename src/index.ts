@@ -19,6 +19,7 @@ export { RegicideRoom } from './regicide/room';
 export { TaiDiRoom } from './taidi/room';
 export { Connect4Room } from './connect4/room';
 export { OmokRoom } from './omok/room';
+export { WordAgentsRoom } from './wordagents/room';
 
 function generateRoomCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -68,6 +69,18 @@ async function createOmokRoom(env: Env, extra: Record<string, unknown> = {}): Pr
   for (let attempt = 0; attempt < 5; attempt++) {
     const roomCode = generateRoomCode();
     const res = await env.OMOK_ROOM.getByName(roomCode).fetch(
+      new Request('https://internal/create', { method: 'POST', body: JSON.stringify({ roomCode, ...extra }) }),
+    );
+    if (res.ok) return roomCode;
+  }
+  return null;
+}
+
+/** Creates a Word Agents room (retrying on the rare code collision). Returns null if none could be allocated. */
+async function createWordAgentsRoom(env: Env, extra: Record<string, unknown> = {}): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const roomCode = generateRoomCode();
+    const res = await env.WORDAGENTS_ROOM.getByName(roomCode).fetch(
       new Request('https://internal/create', { method: 'POST', body: JSON.stringify({ roomCode, ...extra }) }),
     );
     if (res.ok) return roomCode;
@@ -155,6 +168,13 @@ async function handleTelegramCommand(cmd: TelegramCommand, env: Env, origin: str
       await sendMessage(token, cmd.chatId, roomCode
         ? `⚫ ${who} started an Omok game — connect five in a row to win (2 players)!\nJoin → ${origin}/omok/#${roomCode}`
         : '⚫ Could not start an Omok game right now — please try again.');
+      return;
+    }
+    case 'newwordagents': {
+      const roomCode = await createWordAgentsRoom(env);
+      await sendMessage(token, cmd.chatId, roomCode
+        ? `🕵️ ${who} started Word Agents (4–12 players)!\nJoin → ${origin}/wordagents/#${roomCode}`
+        : 'Could not start Word Agents. Please try again.');
       return;
     }
     case 'leaderboard': {
@@ -471,6 +491,35 @@ export default {
       const room = url.searchParams.get('room')?.toUpperCase();
       if (!room) return new Response('Missing room', { status: 400 });
       return env.CONNECT4_ROOM.getByName(room).fetch(new Request('https://internal/debug/patch', { method: 'POST', body: await request.text() }));
+    }
+
+    // --- Word Agents (unranked teams) ---
+    if (url.pathname === '/api/wordagents/create' && request.method === 'POST') {
+      if (!await getAuthClaims(request, env.JWT_SECRET)) return Response.json({ error: 'Sign in to create a room' }, {status: 401});
+      const roomCode = await createWordAgentsRoom(env, {});
+      return roomCode ? Response.json({ roomCode }) : Response.json({ error: 'Could not allocate a room' }, { status: 503 });
+    }
+
+    if (url.pathname === '/api/wordagents/ws') {
+      const roomCode = url.searchParams.get('room')?.toUpperCase();
+      if (!roomCode || !/^[A-Z0-9]{4}$/.test(roomCode)) return new Response('Missing room code', { status: 400 });
+      // Only a verified JWT yields a tg_ id (which the room requires to take a seat and be rated).
+      // Anyone else connects as a guest and can only watch.
+      const forward = new URL(request.url);
+      const token = forward.searchParams.get('token');
+      const claims = token ? await verifyJwt(token, env.JWT_SECRET) : null;
+      forward.searchParams.delete('token');
+      forward.searchParams.delete('name');
+      if (claims) {
+        forward.searchParams.set('playerId', `tg_${claims.sub}`);
+        const user = await getUser(env.DB, Number(claims.sub)).catch(() => null);
+        const name = normalizePlayerName(user?.display_name) || normalizePlayerName(claims.name);
+        if (name) forward.searchParams.set('name', name);
+      } else {
+        const guest = (forward.searchParams.get('playerId') ?? '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 64);
+        forward.searchParams.set('playerId', `guest_${guest || crypto.randomUUID()}`);
+      }
+      return env.WORDAGENTS_ROOM.getByName(roomCode).fetch(new Request(forward.toString(), request));
     }
 
     // --- Omok (1v1) ---
