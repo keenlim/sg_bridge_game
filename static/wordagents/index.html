@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d16">
+  <title>Word Agents · funCentral</title>
+  <meta name="description" content="One clue. A field of possibilities. A multiplayer team word game on funCentral.">
+  <script src="/fc-host.js"></script>
+  <!-- /style.css is the funCentral design system; wordagents.css adds the dossier board theme on top. -->
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/wordagents/wordagents.css">
+</head>
+<body class="wa-body">
+
+  <!-- Top bar (visible in a room) -->
+  <div id="top-bar" class="top-bar hidden">
+    <button id="tb-room" type="button" class="top-bar-room" aria-label="Copy invite link"></button>
+    <span id="tb-conn" class="wa-conn" role="status" aria-live="polite"></span>
+    <span id="tb-name" class="top-bar-name"></span>
+    <span id="tb-watchers" class="wa-watchers hidden" title="Watching"></span>
+    <button id="btn-sound" type="button" class="wa-icon-btn" aria-pressed="false" aria-label="Sound effects" title="Sound effects"></button>
+    <button id="btn-rules" type="button" class="wa-icon-btn" aria-label="How to play" title="How to play">?</button>
+    <button id="btn-results" type="button" class="wa-icon-btn hidden" aria-label="View results" title="View results">🏆</button>
+    <button id="btn-leave" type="button" class="btn-leave-global">Leave</button>
+  </div>
+
+  <div id="fx" class="wa-fx" aria-hidden="true"></div>
+  <div id="toasts" class="wa-toasts" role="status" aria-live="polite"></div>
+
+  <!-- Home -->
+  <div id="screen-home" class="screen active">
+    <div class="wa-home-wrap">
+      <div class="home-container wa-home">
+        <a href="/" class="fc-back-link">← funCentral</a>
+        <div class="wa-hero" aria-hidden="true">
+          <div class="wa-hero-grid">
+            <i>ORBIT</i><i class="red">◆</i><i>HARP</i>
+            <i class="blue">●</i><i>LANTERN</i><i>REEF</i>
+            <i>WILLOW</i><i class="neutral">—</i><i class="red">◆</i>
+          </div>
+          <span class="wa-hero-clue">TIDE · 3</span>
+        </div>
+        <h1 class="wa-title">Word Agents</h1>
+        <p class="wa-tagline">One clue. A field of possibilities. Find your agents and avoid the assassin.</p>
+        <ul class="wa-feature-chips" aria-label="At a glance">
+          <li>👥 4–12 players</li><li>🔎 Team deduction</li><li>🤝 Casual · unrated</li>
+        </ul>
+
+        <p id="identity-status" class="subtitle" role="status" aria-live="polite">Checking sign-in…</p>
+
+        <div id="login-section" class="hidden">
+          <p class="subtitle">Sign in with Telegram to create or join a room. Anyone with an invite can watch.</p>
+          <div data-telegram id="telegram-widget-container"></div>
+          <div data-dev-login class="hidden wa-dev-login">
+            <div class="wa-dev-note">Localhost dev login (not available in production)</div>
+            <div class="form-group">
+              <label for="input-dev-name">Dev display name</label>
+              <input type="text" id="input-dev-name" placeholder="e.g. Alice" maxlength="30" autocomplete="off">
+            </div>
+            <button type="button" class="btn btn-secondary">Dev Login</button>
+          </div>
+        </div>
+
+        <div id="game-section" class="hidden">
+          <button id="btn-create" type="button" class="btn btn-primary">＋ Create a room</button>
+          <div class="divider"><span>or join with a code</span></div>
+          <form id="join-form" class="wa-join-row">
+            <input type="text" id="input-code" placeholder="CODE" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-label="Room code">
+            <button id="btn-join" type="submit" class="btn btn-secondary">Join</button>
+          </form>
+          <div id="auth-status" class="auth-status"></div>
+        </div>
+
+        <div class="wa-home-links">
+          <button id="btn-rules-home" type="button" class="btn btn-ghost">📖 How to Play</button>
+        </div>
+      </div>
+
+      <aside class="wa-home-brief" aria-labelledby="brief-title">
+        <p class="wa-eyebrow">Mission briefing</p>
+        <h2 id="brief-title">How a round works</h2>
+        <ol class="wa-steps">
+          <li><b>Pick sides</b><span>Two teams. Each has one spymaster who sees the secret key, and operatives who guess.</span></li>
+          <li><b>Give one clue</b><span>The spymaster says one word and a number linking that many of their agents.</span></li>
+          <li><b>Reveal together</b><span>Operatives mark ideas for teammates, then reveal. Wrong colour ends the turn.</span></li>
+          <li><b>Find them all</b><span>First team to uncover every agent wins. The assassin loses instantly.</span></li>
+        </ol>
+        <p class="wa-brief-note">Spymasters: use your own device and keep the key private.</p>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Lobby -->
+  <div id="screen-lobby" class="screen">
+    <div class="lobby-container wa-lobby">
+      <p class="wa-eyebrow">Mission room</p>
+      <h2>Assemble your teams</h2>
+      <button id="lobby-code-btn" type="button" class="room-code-display" aria-label="Copy invite link">
+        <span class="label">Room code</span>
+        <span id="lobby-code" class="code">----</span>
+        <span class="wa-code-hint">tap to copy invite</span>
+      </button>
+      <div class="lobby-invite-row">
+        <button id="btn-share" type="button" class="btn btn-secondary">Share Invite Link</button>
+      </div>
+
+      <div id="lobby-teams" class="wa-teams"></div>
+      <div id="lobby-bench" class="wa-bench hidden"></div>
+
+      <ul id="lobby-checklist" class="wa-checklist" aria-label="Ready to start"></ul>
+      <p id="lobby-wait" class="status-text"></p>
+      <div id="lobby-login" class="wa-lobby-login"></div>
+      <div class="wa-lobby-actions">
+        <button id="btn-take-seat" type="button" class="btn btn-primary hidden">Join this room</button>
+        <button id="btn-start" type="button" class="btn btn-primary hidden">Start mission</button>
+        <button id="btn-shuffle" type="button" class="btn btn-secondary hidden">🔀 Shuffle teams</button>
+        <button id="btn-rules-lobby" type="button" class="btn btn-ghost">📖 How to Play</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game -->
+  <div id="screen-game" class="screen">
+    <div id="wa-game" class="wa-game">
+      <section class="wa-table" aria-label="Board">
+        <div class="wa-scorebar">
+          <div id="score-red" class="wa-score red"><span class="wa-score-glyph" aria-hidden="true">◆</span><span class="wa-score-label">Red</span><b id="red-left">9</b><small>to find</small></div>
+          <div class="wa-turn-wrap">
+            <h3 id="wa-turn" class="wa-turn" role="status" aria-live="polite" aria-atomic="true"></h3>
+            <p id="wa-you" class="wa-you"></p>
+          </div>
+          <div id="score-blue" class="wa-score blue"><span class="wa-score-glyph" aria-hidden="true">●</span><span class="wa-score-label">Blue</span><b id="blue-left">8</b><small>to find</small></div>
+        </div>
+
+        <div id="wa-clue" class="wa-clue">
+          <span class="wa-clue-label">Clue</span>
+          <strong id="clue-word" class="wa-clue-word"></strong>
+          <span id="clue-count" class="wa-clue-count"></span>
+          <span id="clue-pips" class="wa-pips" aria-hidden="true"></span>
+        </div>
+
+        <div id="secret-bar" class="wa-secret hidden">
+          <span>🔒 <b>Secret key</b> · only spymasters see colours. Keep your screen private.</span>
+          <button id="btn-hide-key" type="button" class="wa-chip-btn" aria-pressed="false">Hide key</button>
+        </div>
+
+        <div id="board" class="wa-board" role="group" aria-label="Word cards, A1 to E5" aria-describedby="board-help"></div>
+        <p id="board-help" class="wa-sr">Arrow keys move between cards. Enter selects a card.</p>
+
+        <div id="dock" class="wa-dock">
+          <p id="dock-hint" class="wa-dock-hint" role="status" aria-live="polite"></p>
+
+          <form id="clue-form" class="wa-clue-form hidden" novalidate>
+            <label for="clue-input" class="wa-sr">One-word clue</label>
+            <input id="clue-input" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="30" placeholder="One-word clue" enterkeyhint="send">
+            <div class="wa-stepper" role="group" aria-label="Number of cards">
+              <button id="count-down" type="button" aria-label="Fewer cards">−</button>
+              <output id="count-value" aria-live="polite">2</output>
+              <button id="count-up" type="button" aria-label="More cards">+</button>
+            </div>
+            <button id="btn-clue" type="submit" class="btn btn-primary">Send clue</button>
+            <p id="clue-error" class="wa-field-error" role="alert"></p>
+          </form>
+
+          <div id="guess-actions" class="wa-guess-actions hidden">
+            <button id="btn-reveal" type="button" class="btn btn-primary" disabled>Select a card</button>
+            <button id="btn-mark" type="button" class="btn btn-secondary" disabled aria-pressed="false">Mark</button>
+            <button id="btn-end" type="button" class="btn btn-ghost">End turn</button>
+          </div>
+          <button id="btn-dock-results" type="button" class="btn btn-primary hidden">View results</button>
+        </div>
+      </section>
+
+      <aside class="wa-side">
+        <section class="wa-panel">
+          <p class="wa-eyebrow">Agents in the field</p>
+          <div id="roster" class="wa-roster"></div>
+          <button id="btn-abandon" type="button" class="btn btn-ghost wa-abandon hidden">End round for everyone</button>
+        </section>
+        <details id="log-details" class="wa-panel wa-log">
+          <summary>Mission log</summary>
+          <ol id="log" class="wa-log-list"></ol>
+        </details>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Reconnect -->
+  <div id="overlay-reconnect" class="overlay hidden">
+    <div class="overlay-content">
+      <div class="spinner"></div>
+      <p id="reconnect-message" role="status">Reconnecting…</p>
+      <div class="wa-overlay-actions">
+        <button id="btn-reconnect" type="button" class="btn btn-primary hidden">Use this tab</button>
+        <button id="btn-reconnect-home" type="button" class="btn btn-ghost hidden">Back to home</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div id="modal-over" class="overlay wa-modal hidden" role="dialog" aria-modal="true" aria-labelledby="over-title">
+    <div class="gameover-container wa-modal-box">
+      <h2 id="over-title"></h2>
+      <p id="over-sub" class="subtitle"></p>
+      <div id="over-results" class="wa-results"></div>
+      <div class="gameover-actions">
+        <button id="btn-again" type="button" class="btn btn-primary">New round · same teams</button>
+        <button id="btn-to-lobby" type="button" class="btn btn-secondary">Back to lobby</button>
+        <p id="over-wait" class="status-text hidden">Waiting for the host to start the next round…</p>
+        <button id="btn-over-close" type="button" class="btn btn-ghost">View board</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm -->
+  <div id="modal-confirm" class="overlay wa-modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+    <div class="lobby-container wa-modal-box">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body" class="subtitle"></p>
+      <div class="wa-confirm-actions">
+        <button id="confirm-cancel" type="button" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-ok" type="button" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rules -->
+  <div id="modal-rules" class="overlay wa-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+    <div class="lobby-container wa-modal-box wa-rules">
+      <button type="button" class="kick-btn wa-close" data-close aria-label="Close">✕</button>
+      <h2 id="rules-title">How to Play</h2>
+      <p>Two teams race to find their secret agents hidden among <b>25 words</b>. The starting team has <b>nine</b> agents, the other <b>eight</b>. There are also seven civilians and one assassin.</p>
+      <h3>Teams and roles</h3>
+      <p>Each team has one <b>spymaster</b> and at least one <b>operative</b>. Only spymasters see the key: which words belong to which team. Four to twelve players can join; the host can shuffle teams.</p>
+      <h3>Your turn</h3>
+      <ol>
+        <li>The spymaster gives <b>one word and a number</b>, e.g. <i>TIDE · 3</i>, linking that many of their team’s agents.</li>
+        <li>Operatives discuss, <b>mark</b> cards to share ideas, then reveal one card at a time. They may make the number plus one guesses, and must make at least one before ending the turn.</li>
+        <li>Your agent: keep going. A civilian or the other team’s agent: your turn ends. <b>The assassin: your team loses immediately.</b></li>
+      </ol>
+      <h3>Fair clues</h3>
+      <p>Clues are about meaning, not spelling, letter count or board position. A clue can’t be, or contain, a word still on the board (the game blocks these). Agree on borderline clues together.</p>
+      <h3>Playing remotely</h3>
+      <p>Coordinates (A1–E5) on every card make it easy to talk through options in chat or on a call. Spymasters should use their own device; roles stay locked until the round ends, including after a reconnect. Word Agents is casual and unrated.</p>
+      <p class="wa-fine">An original funCentral game inspired by classic team word-deduction party games. Not affiliated with any publisher.</p>
+    </div>
+  </div>
+
+  <script src="/fc-auth.js"></script>
+  <script src="/wordagents/wordagents.js"></script>
+</body>
+</html>

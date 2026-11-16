@@ -54,6 +54,14 @@ new_sqlite_classes = ["Connect4Room"]
 tag = "v5"
 new_sqlite_classes = ["OmokRoom"]
 
+[[durable_objects.bindings]]
+name = "WORDAGENTS_ROOM"
+class_name = "WordAgentsRoom"
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["WordAgentsRoom"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "sg-bridge-users"

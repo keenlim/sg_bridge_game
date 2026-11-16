@@ -5,6 +5,7 @@ export const GAME_CATALOG = [
   { id: 'taidi', name: 'Tai Di', path: '/taidi/', telegramCommand: 'newtaidi', players: '2–4 players', emoji: '🎴' },
   { id: 'connect4', name: 'Connect 4', path: '/connect4/', telegramCommand: 'newconnect4', players: '2 players', emoji: '🔴' },
   { id: 'omok', name: 'Omok', path: '/omok/', telegramCommand: 'newomok', players: '2 players', emoji: '⚫' },
+  { id: 'wordagents', name: 'Word Agents', path: '/wordagents/', telegramCommand: 'newwordagents', players: '4–12 players', emoji: '🕵️' },
 ] as const;
 
 export type GameId = typeof GAME_CATALOG[number]['id'];

@@ -181,7 +181,6 @@
 @media (min-width: 1100px) {
   .hub-games { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .hub-games .game-tile { grid-column: span 2; }
-  .hub-games :is(.tile-connect4, .tile-omok) { grid-column: span 3; }
 }
 @media (max-width: 639px) {
   .hub-cta .btn { flex: 1 1 100%; }
@@ -194,3 +193,11 @@
 @media (prefers-reduced-motion: reduce) {
   .hub-body *, .hub-body *::before, .hub-body *::after { animation: none !important; transition: none !important; }
 }
+
+/* Word Agents: original dossier art, no third-party game artwork. */
+.tile-wordagents .tile-art { background: radial-gradient(ellipse at 25% 25%, #86405144, transparent 70%), linear-gradient(135deg, #1b1b2c, #162b45); }
+.tile-word-grid { display: grid; grid-template-columns: repeat(3, 72px); gap: 7px; transform: rotate(-8deg); }
+.tile-word-grid span { background: #e4d8be; color: #302c37; padding: 13px 4px; border-radius: 5px; font-size: 10px; text-align: center; font-weight: 850; box-shadow: 0 3px 0 #0004; }
+.tile-word-grid span:nth-child(3n+1) { background: #c96b7b; color: #fff; }
+.tile-word-grid span:nth-child(4n) { background: #6396c9; color: #fff; }
+.tile-word-grid span:nth-child(5) { background: #252c3e; color: #dbe5f5; }

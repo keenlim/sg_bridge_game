@@ -15,6 +15,7 @@ D1 and a vanilla JavaScript frontend.
 | Tai Di | [/taidi/](https://funcentral.vocs.io/taidi/) | Big Two for 2–4 players: be first to empty your hand, with the 2 as the highest card. Includes spectators and a separate rating/stats. |
 | Connect 4 | [/connect4/](https://funcentral.vocs.io/connect4/) | Two-player 1v1: drop discs and be first to connect four in a row. Includes a practice bot, spectators and a separate rating/stats. |
 | Omok | `/omok/` | Two-player freestyle five in a row on a 15×15 board. Includes a practice bot, spectators, precise touch placement, keyboard navigation and separate ratings. See [Omok](docs/omok.md). |
+| Word Agents | `/wordagents/` | Casual team word deduction for 4–12 players: spymasters give one-word clues, operatives mark and reveal, and the assassin loses instantly. Unrated. See [Word Agents](docs/wordagents/README.md). |
 
 Choose a game from the hub, sign in with Telegram, create a room and share its
 four-character code or invite link. All games use the same account and saved
@@ -22,9 +23,9 @@ sign-in, but their ratings and leaderboards stay separate. Old Bridge invites
 such as `/#ABCD` still redirect to `/bridge/#ABCD`.
 
 In Telegram groups, **[@funCentral_bot](https://t.me/funCentral_bot)** shows
-an inline **Bridge | Regicide | Tai Di | Connect 4 | Omok** choice for `/newgame`; choosing a game creates
+an inline **Bridge | Regicide | Tai Di | Connect 4 | Omok | Word Agents** choice for `/newgame`; choosing a game creates
 a room in that same group. `/newbridge`, `/newregicide`, `/newtaidi` and `/newconnect4` remain typed
-shortcuts; Omok adds `/newomok`. Aliases `/newregicidegame`, `/newtaidigame`, `/newconnect4game` and `/newomokgame` are also supported. The registered command menu
+shortcuts; Omok adds `/newomok` and Word Agents `/newwordagents`. Aliases `/newregicidegame`, `/newtaidigame`, `/newconnect4game`, `/newomokgame` and `/newwordagentsgame` are also supported. The registered command menu
 contains `/newgame`, `/leaderboard` and `/help` (`/start` also shows help).
 Group boards count eligible group members.
 
@@ -79,6 +80,8 @@ Before a PR, run `npm run test:pr` with an available Chromium browser. See
   `/api/connect4/*` routes and `connect4_*` database tables.
 - Omok lives in `src/omok/` and `static/omok/`, with namespaced
   `/api/omok/*` routes and `omok_*` database tables.
+- Word Agents lives in `src/wordagents/` and `static/wordagents/`, with
+  namespaced `/api/wordagents/*` routes. It is unrated and uses no D1 tables.
 - Future games should follow `src/<game>/`, `static/<game>/` and
   `/api/<game>/*`, with their own room class and game-specific statistics.
   No broad reorganization of Bridge is required.

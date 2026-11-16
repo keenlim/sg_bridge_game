@@ -13,6 +13,8 @@
 | [Omok](omok.md) | Rules, touch/keyboard controls, multiplayer architecture and release requirements |
 | [Omok verification](omok-verification.md) | Implementation checks, current screenshots and coverage limits |
 | [Omok review](omok-review.md) | Independent shared-path/security review, timing fixes and final validation |
+| [Word Agents](wordagents/README.md) | Team word-deduction rules, room authority, UI and release notes |
+| [Word Agents screenshots](wordagents/screenshots/QA.md) | Current desktop/phone captures from real local rounds and their limits |
 | [Contributor code notes](../CLAUDE.md) / [agent rules](../AGENTS.md) | Repository conventions and GitNexus requirements |
 
 The current application is the multi-game Worker, not the root archived
