@@ -1,109 +1,107 @@
-# Word Agents screenshot QA — 2026-11-16
+# Word Agents QA — 2026-11-16
 
 PR: https://github.com/vocsong/funCentral/pull/90
 
-Branch: `feat/word-agents`
+Rendered application commit: `577290d182e1ae76db0ca35f7a8ee7cfb311d123`
 
-Rendered app commit: `81c6fd74b24f3d1699a7b1a133fb391e6c642a47`
+## Actual screenshots and fixture limits
 
-**Every screenshot is an actual local browser rendering with fixture identity,
-room state and WebSockets. These are not live multiplayer screenshots.**
-The branch's HTML, CSS and JavaScript are served unchanged by an isolated
-localhost server. The “Live · room synced” status is simulated. Room QA90 and
-all four people are synthetic. No Telegram or production service is used.
+The 17 Word Agents images are unretouched Chrome screenshots of the local
+application at the commit above. Identity, room state and WebSockets are
+**fixtures, not live multiplayer**. “Live · room synced” is simulated, and
+room QA90, all players and the secret key are synthetic. The additional hub
+image uses the real local Worker with a synthetic Dev Login; it is not a
+production screenshot. No existing browser tabs or other checkouts were used.
 
-## Typography result
+Entry, ready lobby, operative board and spymaster key were captured at desktop
+1440×1000 and phone 390×844. Both board roles were also captured at 320×740.
+The hub regression capture is 1366×900. Images ending `fullpage` include
+content below the viewport; below-fold controls remain reachable by scrolling.
+All **18 images were visually inspected**.
 
-The approved fix restores the intended card font size and weight. At 390px,
-card text computes to **9.92px / 850**, compared with **16px / 400** before
-the fix. At 1440px it computes to **16.32px / 850**.
+## Readable phone labels
 
-There is a remaining readability concern: **4/25 words still split over two
-lines on the phone board**, in both operative and spymaster views:
-LIGHTHOUSE, STRAWBERRY, SUBMARINE and MUSHROOM. All four remain visible;
-none is clipped or hidden. LIGHTHOUSE and SUBMARINE leave a single trailing
-letter on the second line. Desktop has **0/25 split words**. The prior run
-had **19/25 split words** on phone at commit f578b4a.
+The five-column board and existing **9.92px / 850** phone typography are
+preserved. Optional `<wbr>` hints let long words wrap at reading boundaries:
+LIGHT/HOUSE, STRAW/BERRY, SUB/MARINE and MUSH/ROOM. They add no characters,
+change no engine words or rules, and preserve whole-word accessible names.
+On desktop the same labels stay on one line. The new full-deck regression
+checks every original engine word for both roles at 320px and 390px, including
+the longest words, five columns, unchanged spelling, minimum font size,
+single-line reading pieces, whole-word names and containment within each card.
 
-Thus the font override regression is fixed and the board is substantially
-improved, but these captures are **not a claim that every phone word fits on
-one line**. This screenshot task made no additional app-code changes.
-
-| View | Card font | Words split over lines | Horizontal overflow |
+| Captured board, each role | Computed text | Words naturally on two lines | Arbitrary breaks / clipping / side overflow |
 | --- | --- | --- | --- |
-| Desktop operative / spymaster, 1440px | 16.32px / 850 | 0/25 each | None |
-| Phone operative / spymaster, 390px | 9.92px / 850 | 4/25 each | None |
+| Desktop, 1440px | 16.32px / 850 | 0/25 | 0 |
+| Phone, 390px | 9.92px / 850 | 4/25 | 0 |
+| Compact phone, 320px | 9.92px / 850 | 10/25 | 0 |
 
-## Checks
+The four 390px wraps remain LIGHTHOUSE, STRAWBERRY, SUBMARINE and MUSHROOM,
+but now use natural chunks rather than orphan letters. At 320px more words
+use the same reading hints. No global font-size reduction was made.
 
-- Focused command: `PLAYWRIGHT_CHANNEL=chrome npm run test:ui -- tests/ui/wordagents-ui.pw.js --reporter=line` (PowerShell environment assignment).
-- **5 passed, 0 failed, 0 skipped**, including the new mobile font-size/weight
-  regression. Other cases cover stale/cancelled guess confirmation,
-  spymaster key and guess lock, disconnect/rules, and watcher join.
-- Capture harness: all eight screen/viewport combinations rendered; no
-  page JavaScript errors, sideways document overflow or horizontally
-  overflowing controls. Operative confirmation opened and cancelled via
-  mouse on desktop and Playwright `tap()` on phone.
-- All **13 PNGs were visually inspected**. Entry, ready lobby, operative board
-  and spymaster key were captured at both widths, with full-page variants
-  for content below the initial viewport. Full-page captures do not mean
-  all controls fit above the fold.
-- `PLAYWRIGHT_CHANNEL=chrome npm run test:pr` unrestricted retry: **exit 1**.
-  Typecheck passed. Vitest: **477 passed, 0 failed, 0 skipped**, all 47 files
-  passed. Complete Chromium browser stage: **256 passed, 8 failed, 6 skipped**
-  out of 270 cases (13.3 minutes), including all five Word Agents cases passing.
-  This is **not a passing full PR check**.
-- All eight browser failures are stale catalog expectations after adding
-  Word Agents as the sixth game: five viewport cases in
-  `tests/ui/connect4-splash.pw.js:49` expect “Five games” but receive “Six games”;
-  two cases in `tests/ui/omok-live.pw.js:192` expect five `.game-tile` elements
-  but receive six; `tests/ui/telegram-live.pw.js:95` expects five chooser
-  callbacks but receives the additional `newgame:wordagents` option. These
-  assertions were left unchanged under the screenshot/typography task scope.
-  The six skipped cases are opt-in capture/audit/recording utilities, as named
-  in the retained log. Eight failure contexts and traces are retained in the
-  complete bundle.
-- The PR runner stopped before its final 2.5D hand-layout stage because of
-  those browser failures. That stage was completed separately with
-  `HAND_TABLE_VIEW=25d PLAYWRIGHT_CHANNEL=chrome node node_modules/@playwright/test/cli.js test tests/ui/hand-layout.pw.js --output ../wordagents-qa/hand-25d-test-results`:
-  **57 passed, 0 failed, 3 skipped** out of 60 cases (1.2 minutes). The three
-  skipped cases are opt-in font audit, screenshot and recording utilities.
-- Initial sandboxed `npm run test:pr` attempt passed typecheck, then esbuild
-  was blocked from reading ancestor directories. Vitest reported 404 passed,
-  30 failed, 43 skipped across 47 files (31 passed / 16 failed); both browser
-  stages were not reached. These were environment failures, not a passing
-  PR check. The unrestricted retry is reported separately above.
+## Six games, five ranked tabs
 
-## Browser and fixture details
+Hub and Telegram assertions now name all six games. The desktop hub's former
+five-game centering override was removed, giving six tiles in two rows of
+three. The existing five ranked leaderboard tabs remain checked and unchanged:
+Word Agents is casual and unranked.
 
-- Windows, headless Google Chrome **157.0.8103.78**, Playwright **1.64.1**,
-  portable Node **22.23.4**, locked dependencies from `npm ci --include=dev`.
-- Desktop: **1440×1000 CSS px**, DPR 1, mouse input.
-- Phone: **390×844 CSS px**, DPR 1, mobile/touch emulation; not a physical phone.
-- Reduced motion enabled for capture stability. Fresh isolated browser
-  contexts/profile and an ephemeral localhost server were disposed afterward.
-  Existing browser tabs and other checkouts were untouched.
-- Actual words from the engine's original list are rendered, including
-  LIGHTHOUSE, STRAWBERRY and SUBMARINE, rather than WORD0 placeholders.
-- Ready lobby: Alex (host/red operative), Morgan (red spymaster), Casey
-  (blue operative) and Riley (blue spymaster).
-- Operative board: OCEAN 2, one revealed red HARBOR, eight agents remaining
-  for each team; unrevealed identities are masked.
-- Spymaster board: red clue phase, nine red / eight blue / seven civilian /
-  one assassin; Alex is the red spymaster and Morgan is an operative.
-  The displayed secret key is synthetic.
+The Telegram chooser integration does more than count buttons: it selects
+each of the six games, checks acknowledgement before creation and the posted
+invite, then reads the created room. Word Agents is validated through the
+actual `WORDAGENTS_ROOM` binding and its initial room code, empty roster,
+host, revision, guest identity and null game. Outbound Telegram calls are
+captured locally; nothing is sent to Telegram.
 
-## Representative screenshots
+## Validation
 
-These five images are included in the PR branch. The complete Library bundle
-contains all 13 captures plus the capture harness, geometry/typography JSON
-and test logs. Names ending `fullpage` include content below the viewport.
+Environment: Windows; headless Chrome **157.0.8103.78**; Playwright **1.64.1**;
+portable Node **22.23.4**; locked dependencies. Captures use DPR 1 and reduced
+motion. Both phone sizes use mobile/touch emulation; operative confirmation
+was opened with Playwright `tap()` and cancelled, while desktop uses mouse.
+
+| Check | Passed | Failed | Skipped |
+| --- | ---: | ---: | ---: |
+| Word Agents browser fixtures | 7 | 0 | 0 |
+| Affected hub / Omok / Telegram suite | 19 | 0 | 0 |
+| Full Vitest suite, 47 files | 477 | 0 | 0 |
+| Complete Chromium browser suite | 266 | 0 | 6 |
+| Full 2.5D hand-layout repeat | 57 | 0 | 3 |
+
+Full `npm run test:pr` completed with **exit 0**. Typecheck passed. The six
+browser skips and three repeat-stage skips are opt-in capture, font-audit and
+recording utilities. The main browser stage took 12.3 minutes; the repeat took
+1.2 minutes. Counts above describe separate commands/stages and are not added
+as unique test cases.
+
+Commands, with the pinned Node version on PATH:
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL = 'chrome'
+npm run test:ui -- tests/ui/wordagents-ui.pw.js --reporter=line
+npm run test:ui -- tests/ui/connect4-splash.pw.js tests/ui/omok-live.pw.js tests/ui/telegram-live.pw.js --reporter=line
+npm run test:pr
+```
+
+The capture harness completed ten Word Agents screen/viewport combinations
+with no page JavaScript errors, unintended word breaks, horizontally
+overflowing controls or sideways document overflow. `capture-metadata.json`
+retains per-word reading pieces, line counts, font measurements and geometry.
+The complete Library bundle contains all images, the capture harness and logs.
+
+GitNexus indexing, renderer impact analysis and staged change analysis were
+run. Renderer impact was HIGH because existing identity/reconnect flows call
+it; this was flagged before editing. Changes are limited to card-label markup,
+label CSS, the six-tile hub grid and corresponding regressions.
+
+## Representative captures
 
 ### Desktop operative — local UI fixture
 
 ![Desktop operative fixture](desktop-operative-fixture-fullpage.png)
 
-### Phone operative — local UI fixture, four longer words wrap
+### Phone operative, 390px — local UI fixture
 
 ![Phone operative fixture](phone-operative-fixture-fullpage.png)
 
@@ -111,21 +109,35 @@ and test logs. Names ending `fullpage` include content below the viewport.
 
 ![Desktop spymaster fixture](desktop-spymaster-fixture-fullpage.png)
 
-### Phone spymaster key — local UI fixture, four longer words wrap
+### Phone spymaster key, 390px — local UI fixture
 
 ![Phone spymaster fixture](phone-spymaster-fixture-fullpage.png)
 
-### Phone ready lobby — local UI fixture
+### Compact operative, 320px — local UI fixture
+
+![Compact operative fixture](compact-operative-fixture-fullpage.png)
+
+### Compact spymaster key, 320px — local UI fixture
+
+![Compact spymaster fixture](compact-spymaster-fixture-fullpage.png)
+
+### Ready lobby — local UI fixture
 
 ![Phone lobby fixture](phone-lobby-fixture-fullpage.png)
 
-## Limits and provenance
+### Six-game hub — local Worker, synthetic sign-in
 
-These screenshots establish fixture rendering only. They do not establish live
-multiplayer/Worker authority, production networking, Safari, physical
-iPhone/Android, Telegram WebView, screen-reader or assistive-technology
-coverage. Automated live tests in the full PR runner are separate evidence.
+![Local six-game hub](desktop-hub-local.png)
 
-The report records this dated run. Library replacements retain the previous
-screenshots and report in version history. No deploy or merge was performed.
-Only screenshot evidence and this report are added by this QA task.
+## Remaining limits and historical evidence
+
+Automated Chromium mobile emulation is not physical iPhone/Android, Safari or
+Telegram WebView testing. Screen-reader, assistive-technology and production
+network behavior remain unverified. The Word Agents browser screenshots and
+seven browser tests use fixtures; the engine/Durable Object tests and local
+Telegram room-creation integration are separate authority evidence, not a
+complete live four-person Word Agents browser journey.
+
+The [earlier QA snapshot](https://github.com/vocsong/funCentral/blob/e85bf0abf2e755239e5213701eb1a40f4215576f/docs/wordagents/screenshots/QA.md)
+retains the previous captures and findings at its immutable commit. Library
+replacements preserve earlier versions. No merge or deployment was performed.
