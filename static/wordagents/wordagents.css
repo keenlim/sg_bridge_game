@@ -3,3 +3,4 @@
 @media(prefers-reduced-motion:reduce){.wa-card{transition:none}}
 
 .wa-unassigned{grid-column:1/-1}.wa-remove{background:none;border:0;color:#c3b5e9;text-decoration:underline;padding:5px 0;font-size:.7rem;min-height:28px}
+.wa-word{display:block;overflow-wrap:normal;word-break:normal}

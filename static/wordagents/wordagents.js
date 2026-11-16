@@ -5,6 +5,17 @@
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const teamName = team => team === 'red' ? 'Red' : 'Blue';
   const roles = { spymaster: 'Spymaster', operative: 'Operative' };
+  // Optional reading breaks for the original deck. They add no characters and
+  // wrap only when a narrow card needs them; rules and accessible names keep
+  // the complete word. Avoid arbitrary orphan-letter breaks on phone boards.
+  const wordBreaks = Object.fromEntries([
+    'BAL|CONY', 'BOUL|DER', 'CHIM|NEY', 'COM|PASS', 'DIA|MOND',
+    'EN|VE|LOPE', 'FOUN|TAIN', 'HAM|MER', 'HO|RI|ZON', 'LAN|TERN',
+    'LIGHT|HOUSE', 'MEA|DOW', 'MOUN|TAIN', 'MUSH|ROOM', 'NOTE|BOOK',
+    'PUMP|KIN', 'RAIN|BOW', 'SAT|EL|LITE', 'SHAD|OW', 'SPAR|ROW',
+    'STRAW|BERRY', 'SUB|MARINE', 'THUN|DER', 'TRI|ANGLE', 'TRUM|PET',
+    'UM|BRELLA', 'VOL|CANO', 'WATER|FALL', 'WIN|DOW',
+  ].map(parts => [parts.replaceAll('|', ''), parts.split('|')]));
   let profile = null, socket = null, view = null, room = '', retryTimer = 0, retryDelay = 800, heartbeat = 0, pendingTimer = 0;
   let pending = false, generation = 0, lastMessage = 0, fatal = false, selection = null, joined = false, ready = false, leaving = false;
   const connected = () => ready && socket?.readyState === WebSocket.OPEN;
@@ -120,7 +131,13 @@
     $('secret-note').hidden = me?.role !== 'spymaster' || finished;
     const board = $('board'); const focusedIndex = document.activeElement?.dataset?.index; board.replaceChildren();
     game.cards.forEach((card, index) => {
-      const button = node('button', `wa-card${card.color ? ' ' + card.color : ''}${card.revealed ? ' revealed' : ''}`, card.word);
+      const button = node('button', `wa-card${card.color ? ' ' + card.color : ''}${card.revealed ? ' revealed' : ''}`);
+      const label = node('span', 'wa-word');
+      (wordBreaks[card.word] || [card.word]).forEach((part, i) => {
+        if (i) label.append(document.createElement('wbr'));
+        label.append(document.createTextNode(part));
+      });
+      button.append(label);
       button.type = 'button'; button.dataset.index = index;
       button.disabled = !canGuess() || card.revealed;
       const status = card.color === 'assassin' ? 'Assassin' : card.color === 'neutral' ? 'Civilian' : card.color ? `${teamName(card.color)} agent` : 'Unrevealed';

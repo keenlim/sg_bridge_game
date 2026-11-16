@@ -81,3 +81,40 @@ test('phone card typography is not overridden by the control reset', async ({pag
   expect(typography.size).toBeLessThan(12);
   expect(typography.weight).toBeGreaterThanOrEqual(800);
 });
+
+for (const width of [320,390]) test(`original deck labels use readable natural breaks in five columns at ${width}px`, async ({page}) => {
+  await page.setViewportSize({width,height:844});
+  await setup(page);
+  // Exercise the actual full deck, not WORD0 placeholders or only one sample.
+  const words=fs.readFileSync(path.join(root,'../src/wordagents/engine.ts'),'utf8').match(/WORDS = `([^`]+)`/)[1].split(' ');
+  expect(words).toEqual(expect.arrayContaining(['LIGHTHOUSE','STRAWBERRY','SUBMARINE','MUSHROOM']));
+  let revision=2;
+  for(const role of ['operative','spymaster']) for(let at=0;at<words.length;at+=25) {
+    const batch=Array.from({length:25},(_,i)=>words[at+i]||words[0]);
+    const state=initial();state.revision=revision++;state.you.role=role;state.players[0].role=role;
+    state.game.phase=role==='spymaster'?'clue':'guess';
+    state.game.cards=batch.map(word=>({word,color:role==='spymaster'?'red':null,revealed:false}));
+    await page.evaluate(state=>fakeSocket.push(state),state);
+    const layout=await page.locator('#board').evaluate(board=>({
+      columns:getComputedStyle(board).gridTemplateColumns.split(' ').length,
+      overflow:document.documentElement.scrollWidth>innerWidth,
+      labels:[...board.querySelectorAll('.wa-card')].map(card=>{
+        const label=card.querySelector('.wa-word'),bounds=card.getBoundingClientRect();
+        const pieces=[...label.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).map(n=>{
+          const range=document.createRange();range.selectNodeContents(n);const rects=[...range.getClientRects()];
+          return {text:n.textContent,lines:rects.length,fits:rects.every(r=>r.left>=bounds.left&&r.right<=bounds.right)};
+        });
+        return {word:label.textContent,size:parseFloat(getComputedStyle(label).fontSize),weight:Number(getComputedStyle(label).fontWeight),pieces};
+      }),
+    }));
+    expect(layout.columns).toBe(5);expect(layout.overflow).toBe(false);
+    expect(layout.labels.map(l=>l.word)).toEqual(batch);
+    for(const label of layout.labels) {
+      expect(label.size).toBeGreaterThanOrEqual(9.9);expect(label.weight).toBeGreaterThanOrEqual(800);
+      for(const piece of label.pieces) {expect(piece.text.length, label.word).toBeGreaterThanOrEqual(2);expect(piece.lines,label.word).toBe(1);expect(piece.fits,label.word).toBe(true);}
+    }
+    for(const word of ['LIGHTHOUSE','STRAWBERRY','SUBMARINE']) if(batch.includes(word)) {
+      await expect(page.getByRole('button',{name:`${word}, ${role==='spymaster'?'Red agent':'Unrevealed'}`,exact:true})).toHaveCount(1);
+    }
+  }
+});

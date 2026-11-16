@@ -46,8 +46,9 @@ for (const viewport of [
     const { page, context, errors } = await pageFor(browser, viewport);
     try {
       await page.goto(worker.origin);
-      await expect(page.locator('.hub-lede')).toContainText('Five games');
-      await expect(page.locator('.hub-games .game-tile')).toHaveCount(5);
+      await expect(page.locator('.hub-lede')).toContainText('Six games');
+      await expect(page.locator('.hub-games .game-tile')).toHaveCount(6);
+      await expect(page.locator('.hub-games a[href="/wordagents/"]')).toHaveCount(1);
       await expect(page.locator('.hub-games a[href="/connect4/"]')).toHaveCount(1);
       await artIsValid(page, '.tile-connect4-rack');
       await fits(page, '.hub, .hub-hero, .hub-games, .game-tile, .tile-art, .tile-connect4-rack, .tile-btn');
@@ -55,6 +56,7 @@ for (const viewport of [
       if (viewport.width >= 1100) {
         expect(new Set(cards.slice(0,3)).size).toBe(1);
         expect(cards[3]).toBe(cards[4]);
+        expect(cards[4]).toBe(cards[5]);
         expect(cards[3]).toBeGreaterThan(cards[0]);
       }
       await page.screenshot({ path: test.info().outputPath('hub.png'), fullPage: true });

@@ -1,5 +1,5 @@
 // Telegram bot commands end-to-end: updates are POSTed to the real local webhook, and every
-// outbound Bot API call is captured (nothing reaches Telegram). Covers both games in one group.
+// outbound Bot API call is captured (nothing reaches Telegram). Covers all six game choices.
 const { test, expect } = require('@playwright/test');
 const { Response: MfResponse } = require('miniflare');
 const { startWorker } = require('./live-worker.cjs');
@@ -92,10 +92,10 @@ test('/newgame offers games first, then each choice creates the selected group r
   const menu = sent.filter((c) => c.method === 'sendMessage' && c.body.reply_markup).at(-1).body;
   expect(menu.text).toContain('Which game');
   expect(menu.text).not.toMatch(/\/#/);
-  expect(menu.reply_markup.inline_keyboard.flat().map((b) => b.callback_data)).toEqual(['newgame:bridge', 'newgame:regicide', 'newgame:taidi', 'newgame:connect4', 'newgame:omok']);
+  expect(menu.reply_markup.inline_keyboard.flat().map((b) => b.callback_data)).toEqual(['newgame:bridge', 'newgame:regicide', 'newgame:taidi', 'newgame:connect4', 'newgame:omok', 'newgame:wordagents']);
   expect(await worker.db.prepare('SELECT COUNT(*) AS n FROM groups').first('n')).toBe(0);
 
-  for (const game of ['bridge', 'regicide', 'taidi', 'connect4', 'omok']) {
+  for (const game of ['bridge', 'regicide', 'taidi', 'connect4', 'omok', 'wordagents']) {
     const at = sent.length;
     await chooseGame(`newgame:${game}`);
     const calls = sent.slice(at);
@@ -109,13 +109,16 @@ test('/newgame offers games first, then each choice creates the selected group r
       const phase = await roomState.get(roomState.idFromName(room)).fetch('https://internal/phase');
       expect((await phase.json()).phase).toBe('lobby');
     } else {
-      const rooms = await worker.mf.getDurableObjectNamespace(game === 'taidi' ? 'TAIDI_ROOM' : game === 'connect4' ? 'CONNECT4_ROOM' : game === 'omok' ? 'OMOK_ROOM' : 'REGICIDE_ROOM');
+      const binding = {regicide:'REGICIDE_ROOM',taidi:'TAIDI_ROOM',connect4:'CONNECT4_ROOM',omok:'OMOK_ROOM',wordagents:'WORDAGENTS_ROOM'}[game];
+      const rooms = await worker.mf.getDurableObjectNamespace(binding);
       const response = await rooms.get(rooms.idFromName(room)).fetch('https://internal/?playerId=guest_observer', { headers: { Upgrade: 'websocket' } });
       expect(response.status).toBe(101);
       const socket = response.webSocket;
       socket.accept();
       const state = await new Promise((resolve) => socket.addEventListener('message', (event) => resolve(JSON.parse(event.data)), { once: true }));
-      expect(state.groupName).toBe('Card <Club>');
+      if (game === 'wordagents') {
+        expect(state).toMatchObject({type:'state',roomCode:room,revision:0,hostId:null,players:[],you:{id:'guest_observer',team:null,role:null}});
+      } else expect(state.groupName).toBe('Card <Club>');
       expect(state.game).toBeNull();
       socket.close(1000);
     }
