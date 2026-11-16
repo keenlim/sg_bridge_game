@@ -73,3 +73,11 @@ test('signed-in watcher can explicitly join when a running game returns to lobby
   await page.getByRole('button',{name:'Join this room',exact:true}).click();
   expect(await page.evaluate(i=>JSON.parse(framesSent[i]),before)).toEqual({type:'join',name:'Alex'});
 });
+
+test('phone card typography is not overridden by the control reset', async ({page}) => {
+  await page.setViewportSize({width:390,height:844});
+  await setup(page);
+  const typography = await page.locator('.wa-card').first().evaluate(card => ({size:parseFloat(getComputedStyle(card).fontSize),weight:Number(getComputedStyle(card).fontWeight)}));
+  expect(typography.size).toBeLessThan(12);
+  expect(typography.weight).toBeGreaterThanOrEqual(800);
+});
