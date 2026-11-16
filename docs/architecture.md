@@ -15,6 +15,7 @@ systems. [Development](development.md), [deployment](deployment.md) and
 | Tai Di | `/taidi/` → `static/taidi/` | `TaiDiRoom` via `TAIDI_ROOM`; `/api/taidi/*`; `taidi_*` D1 tables |
 | Connect 4 | `/connect4/` → `static/connect4/` | `Connect4Room` via `CONNECT4_ROOM`; `/api/connect4/*`; `connect4_*` D1 tables |
 | Omok | `/omok/` → `static/omok/` | `OmokRoom` via `OMOK_ROOM`; `/api/omok/*`; `omok_*` D1 tables |
+| Word Agents | `/wordagents/` → `static/wordagents/` | `WordAgentsRoom` via `WORDAGENTS_ROOM`; `/api/wordagents/*`; unrated, no D1 tables |
 | Shared services | Same-origin clients | Telegram auth, `/api/me`, `/api/config`, `/api/telegram`, shared users/groups in D1 |
 
 `src/index.ts` routes requests and exports the room classes. A room code names
@@ -175,7 +176,7 @@ D1 SQL migrations and Durable Object class migrations are separate. Existing
 bindings are `GAME_ROOM`/`GameRoom` (`v1`),
 `REGICIDE_ROOM`/`RegicideRoom` (`v2`),
 `TAIDI_ROOM`/`TaiDiRoom` (`v3`) and
-`CONNECT4_ROOM`/`Connect4Room` (`v4`) and `OMOK_ROOM`/`OmokRoom` (`v5`). Keep those identities and add incremental
+`CONNECT4_ROOM`/`Connect4Room` (`v4`), `OMOK_ROOM`/`OmokRoom` (`v5`) and `WORDAGENTS_ROOM`/`WordAgentsRoom` (`v6`). Keep those identities and add incremental
 migrations for future classes. See [deployment](deployment.md).
 
 ## Adding another game

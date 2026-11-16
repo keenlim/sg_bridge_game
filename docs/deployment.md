@@ -198,6 +198,15 @@ authorization before applying reviewed pending SQL. Never replay
 as part of Omok implementation/testing. See [Omok](omok.md) for behavior and
 verification, including the missing-schema fallback.
 
+### Word Agents (`v6` Durable Object, no SQL)
+
+Word Agents adds the `WORDAGENTS_ROOM` binding and `WordAgentsRoom` class with
+an appended `v6` SQLite class migration, applied by the normal Workers Builds
+deployment. It is casual and unrated: there is **no D1 migration** and no
+existing table, rating or leaderboard changes. After rollout, create a room,
+confirm four players can shuffle/start, that only spymasters see the key, and
+that a refresh keeps roles. No deployment was performed during testing.
+
 ### Tai Di migration (inspect current pending list)
 
 `0012_taidi.sql` creates four Tai Di tables (`taidi_ratings`, `taidi_games`,

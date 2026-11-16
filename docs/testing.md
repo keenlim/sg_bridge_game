@@ -110,6 +110,8 @@ the `newgame`/`leaderboard`/`help` command menu. Static hub tiles and the typed
 | 4245 | Omok live game, touch/keyboard, recovery and lobby integration |
 | 4246 | Omok live Worker without Omok tables |
 | 4247 | Omok review: isolated leaderboard timing and real production-like auth/debug gates |
+| 4250 | Word Agents live rounds, marks, reconnect, rematch and second-tab takeover |
+| 4252 | Word Agents screenshot capture (`tests/ui/wordagents-capture.cjs`, not a suite) |
 
 Keep these ports free and run one suite at a time. `tests/ui/live-worker.cjs`
 bundles the current checked-out Worker and assets, binds both room classes,

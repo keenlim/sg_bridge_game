@@ -1,28 +1,42 @@
 # Word Agents
 
-Original funCentral team word-association game inspired by the mechanics of Codenames. No CGE artwork, logos, rulebook text or publisher word deck is included. Word Agents is not an official Codenames product.
+Original funCentral team word-association game inspired by the mechanics of classic team word-deduction party games. No third-party artwork, logos, rulebook text or publisher word deck is included, and Word Agents is not affiliated with any publisher.
 
 ## Play
 
-Open `/wordagents/`, sign in through the existing Telegram identity, create a room and share the invite. Four to twelve players choose red/blue teams with exactly one spymaster and at least one operative per team. The host starts once everyone is assigned and connected. Signed-out visitors may watch but cannot play.
+Open `/wordagents/`, sign in through the shared Telegram identity, create a room and share the invite. Signed-out visitors can watch and sign in from the lobby without losing the invite.
 
-A random 5×5 board contains nine agents for the starting team, eight for the other team, seven civilians and one assassin. Spymasters alone receive the unrevealed key. A turn starts with a single English word and number 1–9. Operatives reveal at least one card, then may stop; they can make up to count+1 guesses while correct. A civilian/opponent ends the turn, an assassin loses instantly, and completing either team's agents awards that team the win. Basic clue validation blocks board words and substrings; players judge semantic fairness. Advanced zero/unlimited clues are deliberately out of scope.
+- **Lobby.** Four to twelve players pick a team and a role: each team needs exactly one spymaster (🔑) and at least one operative. The host can **Shuffle teams** into balanced sides with one spymaster each, remove players (removed players may still watch but cannot rejoin that room) and starts once the readiness checklist is complete.
+- **Board.** A random 5×5 board holds nine agents for the starting team, eight for the other, seven civilians and one assassin. Every card shows a coordinate (A1–E5) so remote teams can talk about it in chat or on a call.
+- **Spymasters** alone see the key: tinted cards with a colour band and a shape (◆ red, ● blue, — civilian, ✕ assassin) so colour is never the only cue. **Hide key** blanks the tints on their own screen. The clue dock checks one-word, letters-only clues inline and blocks words that are, or contain, an unrevealed board word; the server repeats every check.
+- **Operatives** tap a card to select it, then **Reveal** it or **Mark** it. Marks show the marker’s initials on the card for everyone, so a team on separate devices can converge before committing. Marks are advisory: they clear on reveal and at the end of the turn, and never invalidate a teammate’s pending reveal. After at least one guess, **End turn** asks for confirmation.
+- **Turn rules.** Up to count + 1 guesses while correct. A civilian or opposing agent ends the turn, the assassin loses instantly, and the first team to uncover all of its agents wins. Zero/unlimited clues are out of scope.
+- **Results.** The full key is revealed. The host can start a **New round · same teams** or go **Back to lobby** to change roles; everyone else sees who won and why.
 
-Use separate devices for spymasters. Roles cannot change during a round, including after reconnect. All action legality, key projection, shuffle and stale-command guards are server-side. Gameplay is casual/unranked: no D1 migration, scores or existing game ratings are touched. State persists in its own SQLite Durable Object. Empty rooms expire after 30 minutes. Refresh/reconnect retains roles and current board; a second tab replaces the previous connection.
+The screen keeps a live connection dot, watcher count, optional synthesised sounds (off by default), reveal animations that respect reduced motion, toasts for every reveal, a per-turn mission log, a sticky action dock on phones and arrow-key navigation across the board.
+
+## Authority and privacy
+
+All legality, key projection, shuffles and stale-command guards are server-side in `WordAgentsRoom`. Spymasters receive the key; operatives, watchers and guests receive colours only for revealed cards until the round ends. Clue, guess and end-turn commands carry the board `revision`; marks and presence changes are broadcast without bumping it. Rejoining is a no-op, so a reconnect never disturbs an in-flight command.
+
+Roles lock for the round, including after reconnect; a second tab takes over the seat, and the first tab can take it back. The chosen host keeps the room through a refresh: while they are offline the first connected player stands in, and host controls return when they reconnect. Players can join only from the lobby, so late arrivals never block a same-teams rematch.
+
+Gameplay is casual and unrated: no D1 tables, scores or other games’ ratings are touched. State persists in the room’s own SQLite Durable Object; empty rooms expire after 30 minutes.
 
 ## Integration and release
 
-- `src/wordagents/`: rules and room authority.
-- `static/wordagents/`: responsive accessible client; shared `/style.css` and `/fc-auth.js`.
-- `WORDAGENTS_ROOM` / `WordAgentsRoom` with additive DO migration `v6`.
-- `/api/wordagents/create`, `/api/wordagents/ws` and `/newwordagents`.
-- Shared catalog, hub and local Worker harness extended. No existing game route changed.
-- Merge deploys through the existing Workers Builds pipeline. Never manually deploy for QA.
+- `src/wordagents/engine.ts` (rules, structured public history, marks) and `src/wordagents/room.ts` (room authority).
+- `static/wordagents/`: client built on the shared `/style.css` design system (`.top-bar`, `.home-container`, `.lobby-container`, `.overlay`, `.gameover-container`) plus `/fc-auth.js`.
+- `WORDAGENTS_ROOM` / `WordAgentsRoom` with additive DO migration `v6`; no D1 migration.
+- `/api/wordagents/create`, `/api/wordagents/ws`, `/newwordagents` (alias `/newwordagentsgame`) and the `/newgame` chooser.
+- Merge deploys through the existing Workers Builds pipeline. Never deploy manually for QA.
 
 ## Checks
 
-`npx vitest run tests/wordagents-engine.test.ts tests/wordagents-room.test.ts`
+```sh
+npm run test:wordagents       # engine + room (Vitest, real SQLite Durable Object)
+npm run test:wordagents:ui    # fixture UI + live multiplayer (port 4250)
+npm run test:pr               # always, before merge
+```
 
-`npx playwright test tests/ui/wordagents-ui.pw.js`
-
-Always also run `npm run test:pr`. Fixture UI tests are not live multiplayer/browser E2E. Automated Chromium mobile emulation does not verify iOS Safari or physical touch devices.
+`tests/ui/wordagents-capture.cjs` regenerates the [screenshot gallery](screenshots/QA.md) from real local rounds (port 4252); it is not a test. Chromium mobile emulation does not verify iOS Safari, Telegram WebView or physical touch devices.
