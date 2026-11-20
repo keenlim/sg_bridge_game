@@ -207,6 +207,10 @@ existing table, rating or leaderboard changes. After rollout, create a room,
 confirm four players can shuffle/start, that only spymasters see the key, and
 that a refresh keeps roles. No deployment was performed during testing.
 
+### Flip 7 and 6 nimmt! (Durable Objects `v7` and `v8`, no SQL)
+
+The combined integration adds two independent SQLite-backed room classes: `Flip7Room` via `FLIP7_ROOM` in `v7`, and `SixNimmtRoom` via `SIXNIMMT_ROOM` in `v8`. Preserve the existing migration history and verify the target has not already used either tag before deploying. Neither game needs a D1 schema change. Verify both games in the public hub and Telegram picker after rollout, including rejoining a room after a network interruption.
+
 ### Tai Di migration (inspect current pending list)
 
 `0012_taidi.sql` creates four Tai Di tables (`taidi_ratings`, `taidi_games`,

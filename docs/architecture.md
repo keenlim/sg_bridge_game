@@ -15,6 +15,8 @@ systems. [Development](development.md), [deployment](deployment.md) and
 | Tai Di | `/taidi/` → `static/taidi/` | `TaiDiRoom` via `TAIDI_ROOM`; `/api/taidi/*`; `taidi_*` D1 tables |
 | Connect 4 | `/connect4/` → `static/connect4/` | `Connect4Room` via `CONNECT4_ROOM`; `/api/connect4/*`; `connect4_*` D1 tables |
 | Omok | `/omok/` → `static/omok/` | `OmokRoom` via `OMOK_ROOM`; `/api/omok/*`; `omok_*` D1 tables |
+| 6 nimmt! | `/sixnimmt/` → `static/sixnimmt/` | `SixNimmtRoom` via `SIXNIMMT_ROOM`; `/api/sixnimmt/*`; unrated, no game-specific D1 tables |
+| Flip 7 | `/flip7/` → `static/flip7/` | `Flip7Room` via `FLIP7_ROOM`; `/api/flip7/*`; unrated, no game-specific D1 tables |
 | Word Agents | `/wordagents/` → `static/wordagents/` | `WordAgentsRoom` via `WORDAGENTS_ROOM`; `/api/wordagents/*`; unrated, no D1 tables |
 | Shared services | Same-origin clients | Telegram auth, `/api/me`, `/api/config`, `/api/telegram`, shared users/groups in D1 |
 

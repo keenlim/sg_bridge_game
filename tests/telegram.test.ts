@@ -16,6 +16,8 @@ describe('parseUpdate', () => {
     ['/newtaidi', 'newtaidi'],
     ['/newtaidigame', 'newtaidi'],
     ['/newomok', 'newomok'],
+    ['/NewFlip7@funCentral_bot', 'newflip7'],
+    ['/newflip7game', 'newflip7'],
     ['/newomokgame', 'newomok'],
     ['/NewOmok@funCentral_bot', 'newomok'],
     ['/NewTaiDi@funCentral_bot', 'newtaidi'],
@@ -60,6 +62,11 @@ const selection = (data: unknown, chatType = 'supergroup') => ({
 
 describe('Telegram game selection', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('includes the Flip 7 multiplayer route in the catalog and handles its chooser button', () => {
+    expect(GAME_CATALOG).toContainEqual(expect.objectContaining({ id: 'flip7', path: '/flip7/', players: '3–12 players' }));
+    expect(parseGameSelection(selection('newgame:flip7'))?.command?.command).toBe('newflip7');
+  });
 
   it.each(GAME_CATALOG)('routes the $id button using the clicker and original chat', (game) => {
     expect(parseGameSelection(selection(`newgame:${game.id}`))).toEqual({
