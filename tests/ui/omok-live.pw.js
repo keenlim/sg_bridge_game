@@ -189,7 +189,7 @@ for(const mobile of [false,true]) test(`lobby entry, shared auth and independent
     const auth=await fetch(`${worker.origin}/api/auth/dev`,{method:'POST',body:JSON.stringify({displayName:'Board Omok'})}).then(r=>r.json());
     await worker.db.prepare('INSERT OR REPLACE INTO omok_ratings (telegram_id,rating,games_played,wins,draws,updated_at) VALUES (?,1040,4,3,0,0)').bind(auth.telegramId).run();
     await a.page.goto(worker.origin+'/');
-    await expect(a.page.locator('.game-tile')).toHaveCount(7);
+    await expect(a.page.locator('.game-tile')).toHaveCount(8);
     await expect(a.page.locator('.hub-games a[href="/wordagents/"]')).toHaveCount(1);
     await capture(a.page,mobile?'hub-mobile':'hub-desktop');
     await a.page.locator('.tile-omok').click();

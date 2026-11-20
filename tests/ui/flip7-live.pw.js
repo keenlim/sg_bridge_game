@@ -117,18 +117,24 @@ async function runMultiplayer(createClient) {
     await move(alice, 'start');
     await expect.poll(async () => (await watcher.state())?.game?.round).toBe(1);
 
-    // A shuffled opening deal may require a player to place an action card.
-    // Resolve real choices rather than adding a production deck-seeding route.
+    // A shuffled opening deal can leave the active player with only a resolved
+    // action card. Follow the legal choice/Hit path until someone can actually Stay.
+    const canStay = (game) => {
+      const active = game.players.find((player) => player.id === game.turnId);
+      return active && (active.numbers.length || active.bonuses.length || active.doubled || active.secondChance);
+    };
     for (let steps = 0; steps < 30; ++steps) {
       const observed = await watcher.state();
-      if (!observed.game.pending && observed.game.phase === 'playing') break;
-      const choice = observed.game.pending;
-      const client = choice ? byId.get(choice.actorId) : alice;
+      const game = observed.game;
+      const choice = game.pending;
+      if (!choice && game.phase === 'playing' && canStay(game)) break;
+      const client = choice ? byId.get(choice.actorId) : game.phase === 'playing' ? byId.get(game.turnId) : alice;
       expect(client).toBeDefined();
       await expect.poll(async () => (await client.state()).revision).toBe(observed.revision);
       if (choice) await move(client, 'target', { playerId: choice.targets[0] });
+      else if (game.phase === 'playing') await move(client, 'hit');
       else {
-        expect(observed.game.phase).toBe('roundEnd');
+        expect(game.phase).toBe('roundEnd');
         await move(client, 'nextRound');
       }
       await expect.poll(async () => (await watcher.state()).revision).toBeGreaterThan(observed.revision);
@@ -137,6 +143,7 @@ async function runMultiplayer(createClient) {
     const before = await watcher.state();
     expect(before.game.phase).toBe('playing');
     expect(before.game.pending).toBeNull();
+    expect(canStay(before.game)).toBeTruthy();
     expect(before.game).not.toHaveProperty('deck');
     expect(before.game).not.toHaveProperty('discard');
     expect(before.game.deckCount).toBeGreaterThan(0);

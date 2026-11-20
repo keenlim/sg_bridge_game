@@ -30,6 +30,8 @@ describe('Tai Di per-player view', () => {
     const guest = await connect(room, 2);
     try {
       host.send(JSON.stringify({ type: 'join', name: 'Host' }));
+      // Host is assigned to the first join processed, not the first socket opened.
+      await expect.poll(async () => (await readRoom(room)).state.hostId).toBe('tg_1');
       guest.send(JSON.stringify({ type: 'join', name: 'Guest' }));
       await expect.poll(async () => (await readRoom(room)).state.players.length).toBe(2);
       host.send(JSON.stringify({ type: 'start' }));
