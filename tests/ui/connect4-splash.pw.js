@@ -47,7 +47,7 @@ for (const viewport of [
     try {
       await page.goto(worker.origin);
       await expect(page.locator('.hub-lede')).toContainText('Six games');
-      await expect(page.locator('.hub-games .game-tile')).toHaveCount(6);
+      await expect(page.locator('.hub-games .game-tile')).toHaveCount(7);
       await expect(page.locator('.hub-games a[href="/wordagents/"]')).toHaveCount(1);
       await expect(page.locator('.hub-games a[href="/connect4/"]')).toHaveCount(1);
       await artIsValid(page, '.tile-connect4-rack');

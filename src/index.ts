@@ -19,6 +19,7 @@ export { RegicideRoom } from './regicide/room';
 export { TaiDiRoom } from './taidi/room';
 export { Connect4Room } from './connect4/room';
 export { OmokRoom } from './omok/room';
+export { SixNimmtRoom } from './sixnimmt/room';
 export { WordAgentsRoom } from './wordagents/room';
 
 function generateRoomCode(): string {
@@ -82,6 +83,17 @@ async function createWordAgentsRoom(env: Env, extra: Record<string, unknown> = {
     const roomCode = generateRoomCode();
     const res = await env.WORDAGENTS_ROOM.getByName(roomCode).fetch(
       new Request('https://internal/create', { method: 'POST', body: JSON.stringify({ roomCode, ...extra }) }),
+    );
+    if (res.ok) return roomCode;
+  }
+  return null;
+}
+
+async function createSixNimmtRoom(env: Env): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const roomCode = generateRoomCode();
+    const res = await env.SIXNIMMT_ROOM.getByName(roomCode).fetch(
+      new Request('https://internal/create', { method: 'POST', body: JSON.stringify({ roomCode }) }),
     );
     if (res.ok) return roomCode;
   }
@@ -168,6 +180,13 @@ async function handleTelegramCommand(cmd: TelegramCommand, env: Env, origin: str
       await sendMessage(token, cmd.chatId, roomCode
         ? `⚫ ${who} started an Omok game — connect five in a row to win (2 players)!\nJoin → ${origin}/omok/#${roomCode}`
         : '⚫ Could not start an Omok game right now — please try again.');
+      return;
+    }
+    case 'newsixnimmt': {
+      const roomCode = await createSixNimmtRoom(env);
+      await sendMessage(token, cmd.chatId, roomCode
+        ? `🐂 ${who} started 6 nimmt! (2–10 players)!\nJoin → ${origin}/sixnimmt/#${roomCode}`
+        : 'Could not start 6 nimmt! Please try again.');
       return;
     }
     case 'newwordagents': {
@@ -491,6 +510,29 @@ export default {
       const room = url.searchParams.get('room')?.toUpperCase();
       if (!room) return new Response('Missing room', { status: 400 });
       return env.CONNECT4_ROOM.getByName(room).fetch(new Request('https://internal/debug/patch', { method: 'POST', body: await request.text() }));
+    }
+
+    // --- 6 nimmt! (casual multiplayer) ---
+    if (url.pathname === '/api/sixnimmt/create' && request.method === 'POST') {
+      if (!await getAuthClaims(request, env.JWT_SECRET)) return Response.json({ error: 'Sign in to create a room' }, { status: 401 });
+      const roomCode = await createSixNimmtRoom(env);
+      return roomCode ? Response.json({ roomCode }) : Response.json({ error: 'Could not allocate a room' }, { status: 503 });
+    }
+    if (url.pathname === '/api/sixnimmt/ws') {
+      const roomCode = url.searchParams.get('room')?.toUpperCase();
+      if (!roomCode || !/^[A-Z0-9]{4}$/.test(roomCode)) return new Response('Missing room code', { status: 400 });
+      if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 426 });
+      const token = url.searchParams.get('token');
+      const claims = token ? await verifyJwt(token, env.JWT_SECRET) : null;
+      const forward = new URL('https://internal/ws');
+      if (claims && /^\d+$/.test(claims.sub)) {
+        forward.searchParams.set('playerId', `tg_${claims.sub}`);
+        const user = await getUser(env.DB, Number(claims.sub)).catch(() => null);
+        forward.searchParams.set('name', normalizePlayerName(user?.display_name) || normalizePlayerName(claims.name) || 'Player');
+      } else {
+        forward.searchParams.set('playerId', `guest_${crypto.randomUUID()}`);
+      }
+      return env.SIXNIMMT_ROOM.getByName(roomCode).fetch(new Request(forward, request));
     }
 
     // --- Word Agents (unranked teams) ---

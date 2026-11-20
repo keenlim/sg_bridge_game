@@ -201,3 +201,9 @@
 .tile-word-grid span:nth-child(3n+1) { background: #c96b7b; color: #fff; }
 .tile-word-grid span:nth-child(4n) { background: #6396c9; color: #fff; }
 .tile-word-grid span:nth-child(5) { background: #252c3e; color: #dbe5f5; }
+
+/* 6 nimmt! uses original numbered cards, without publisher artwork. */
+.sixnimmt-art{display:flex;align-items:center;justify-content:center;gap:clamp(.35rem,2vw,1rem);background:radial-gradient(ellipse at 50% 30%,#356a55,#142e29 75%)}
+.sixnimmt-art span{display:grid;place-items:center;background:linear-gradient(155deg,#fffdf5,#e9e4d1);color:#933b50;border-radius:.5rem;width:2.4rem;height:3.4rem;box-shadow:0 .2rem .35rem #28061977;font:850 1.4rem var(--font)}
+.sixnimmt-art span:first-child{transform:rotate(-12deg)}
+.sixnimmt-art span:last-child{transform:rotate(12deg)}

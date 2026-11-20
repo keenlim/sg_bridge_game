@@ -62,6 +62,14 @@ class_name = "WordAgentsRoom"
 tag = "v6"
 new_sqlite_classes = ["WordAgentsRoom"]
 
+[[durable_objects.bindings]]
+name = "SIXNIMMT_ROOM"
+class_name = "SixNimmtRoom"
+
+[[migrations]]
+tag = "v7"
+new_sqlite_classes = ["SixNimmtRoom"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "sg-bridge-users"
