@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1715">
+<title>6 nimmt! · funCentral</title>
+<script src="/fc-host.js"></script>
+<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/sixnimmt/game.css">
+<script src="/fc-auth.js" defer></script><script src="/sixnimmt/effects.js" defer></script><script src="/sixnimmt/game.js" defer></script>
+</head>
+<body class="six-body">
+<header class="six-top">
+  <div class="six-top-inner">
+    <a class="six-back" href="/"><span aria-hidden="true">‹</span> funCentral</a>
+    <div class="six-top-actions">
+      <button id="copy" class="btn btn-secondary six-code" type="button" aria-label="Copy invite" hidden><span id="room-code"></span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a4 4 0 0 0 6 .5l3.2-3.2a4 4 0 0 0-5.7-5.7L12 6m2 5a4 4 0 0 0-6-.5l-3.2 3.2a4 4 0 0 0 5.7 5.7L12 18"/></svg></button>
+      <button id="sound" class="btn btn-secondary" aria-pressed="false" type="button">Sound off</button>
+      <a id="exit" class="btn btn-secondary" href="/sixnimmt/" hidden>Exit room</a>
+    </div>
+  </div>
+</header>
+<main class="six-main">
+  <section id="home" class="six-home home-container">
+    <div class="six-fan" aria-hidden="true">
+      <span class="card" data-tier="1"><span>19</span><small>+1</small></span>
+      <span class="card" data-tier="7"><span>55</span><small>+7</small></span>
+      <img class="six-mascot" src="/sixnimmt/bull.svg" alt="" width="208" height="156" decoding="async">
+    </div>
+    <p class="six-kicker">The card table</p>
+    <h1>6 nimmt!</h1>
+    <p class="six-tagline">The sixth card takes the row.</p>
+    <ul class="six-chips" aria-label="At a glance"><li>2–10 players</li><li>10 cards each</li><li>Casual</li></ul>
+    <div id="login" hidden><p>Sign in with Telegram to create a room or take a seat.</p><div data-telegram></div><div data-dev-login class="hidden"><input aria-label="Test display name"><button class="btn btn-secondary" type="button">Dev sign-in</button></div></div>
+    <button id="create" class="btn btn-primary primary" type="button" disabled>Create a room</button>
+    <form id="join-form">
+      <label for="code">or join with a code</label>
+      <div class="six-join"><input id="code" placeholder="CODE" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" required pattern="[A-Za-z0-9]{4}"><button class="btn btn-secondary">Open room</button></div>
+    </form>
+  </section>
+  <p id="error" role="alert"></p>
+  <section id="room" hidden>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section id="player-panel" class="six-panel">
+      <div class="six-section-head"><h2 id="players-title">Gather your table</h2><span id="seated" class="six-chip"></span></div>
+      <ul id="seats"></ul>
+      <p id="offline-note" role="status" aria-live="polite" hidden></p>
+      <div id="controls" class="six-controls"></div>
+    </section>
+    <section id="game" hidden>
+      <div class="six-felt">
+        <div class="six-table-head"><p class="six-kicker">Table</p><h2 id="round"></h2></div>
+        <p id="turn-info" aria-live="polite"></p>
+        <div class="reveal-lane"><div id="reveal-strip" aria-hidden="true" hidden></div></div>
+        <div id="rows" aria-label="Four rows on the table"></div>
+        <p id="last"></p>
+      </div>
+      <section class="six-panel six-hand-dock" id="private-hand">
+        <div class="six-section-head"><h2>Your hand</h2><span id="hand-size" class="six-chip"></span></div>
+        <div id="hand"></div>
+        <button id="lock" class="btn btn-primary primary" type="button" disabled>Lock card</button>
+      </section>
+    </section>
+  </section>
+  <details class="six-panel six-rules"><summary>How to play</summary>
+    <p>Everyone starts each round with ten cards. Choose one card and lock it in. When everyone is ready, the lowest card plays first. Each card goes after the closest lower number at the end of a row.</p>
+    <p>If your card is lower than all four row ends, you choose a row to take. If your card is sixth in its row, you take the five cards already there. Your card starts the new row either way.</p>
+    <p>The number next to the little bull is the card’s penalty. Finish the round when everyone runs out of cards. Once anyone reaches 66 penalty points at the end of a round, the lowest total wins.</p>
+    <p>Designed by Wolfgang Kramer. This fan implementation is casual and unrated, with original card visuals. Not affiliated with AMIGO.</p>
+  </details>
+</main>
+</body>
+</html>

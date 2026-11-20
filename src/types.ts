@@ -143,7 +143,9 @@ export interface Env {
   TAIDI_ROOM: DurableObjectNamespace;
   CONNECT4_ROOM: DurableObjectNamespace;
   OMOK_ROOM: DurableObjectNamespace;
+  SIXNIMMT_ROOM: DurableObjectNamespace;
   WORDAGENTS_ROOM: DurableObjectNamespace;
+  FLIP7_ROOM: DurableObjectNamespace;
   DB: D1Database;
   JWT_SECRET: string;
   TELEGRAM_BOT_TOKEN: string;

@@ -207,6 +207,21 @@ existing table, rating or leaderboard changes. After rollout, create a room,
 confirm four players can shuffle/start, that only spymasters see the key, and
 that a refresh keeps roles. No deployment was performed during testing.
 
+### Flip 7 and 6 nimmt! (Durable Objects `v7` and `v8`, no SQL)
+
+The combined integration adds two independent SQLite-backed room classes: `Flip7Room` via `FLIP7_ROOM` in `v7`, and `SixNimmtRoom` via `SIXNIMMT_ROOM` in `v8`. Preserve the existing migration history and verify the target has not already used either tag before deploying. Neither game needs a D1 schema change. Verify both games in the public hub and Telegram picker after rollout, including rejoining a room after a network interruption.
+
+Cloudflare does not support a Worker version rollback across Durable Object
+class lifecycle changes. Before the first combined production release, identify
+the latest known-good Bridge/shared code and how to roll forward with it:
+retain all existing and new Durable Object classes, bindings, and migrations,
+while restoring known-good shared routes and disabling only the new lobby and
+Telegram entry points if recovery is needed. Do not delete a room class or
+reuse an applied migration tag. A separately approved migration-only deployment
+would provide a same-class rollback target for a later game activation.
+Confirm an existing Bridge room survives the code-update window and can
+reconnect before calling the release complete.
+
 ### Tai Di migration (inspect current pending list)
 
 `0012_taidi.sql` creates four Tai Di tables (`taidi_ratings`, `taidi_games`,

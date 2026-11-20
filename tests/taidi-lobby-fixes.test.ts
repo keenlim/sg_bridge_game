@@ -26,6 +26,8 @@ describe('Tai Di lobby fixes (vocsong PR #80 review)', () => {
     const guest = await connect(room, 2);
     try {
       host.send(JSON.stringify({ type: 'join', name: 'Host' }));
+      // The room grants host to whichever socket's join it processes first.
+      await expect.poll(async () => (await readRoom(room)).state.hostId).toBe('tg_1');
       guest.send(JSON.stringify({ type: 'join', name: 'Guest' }));
       await expect.poll(async () => (await readRoom(room)).state.players.length).toBe(2);
       host.send(JSON.stringify({ type: 'kick', playerId: 'tg_2' }));

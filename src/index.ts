@@ -19,7 +19,9 @@ export { RegicideRoom } from './regicide/room';
 export { TaiDiRoom } from './taidi/room';
 export { Connect4Room } from './connect4/room';
 export { OmokRoom } from './omok/room';
+export { SixNimmtRoom } from './sixnimmt/room';
 export { WordAgentsRoom } from './wordagents/room';
+export { Flip7Room } from './flip7/room';
 
 function generateRoomCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -82,6 +84,29 @@ async function createWordAgentsRoom(env: Env, extra: Record<string, unknown> = {
     const roomCode = generateRoomCode();
     const res = await env.WORDAGENTS_ROOM.getByName(roomCode).fetch(
       new Request('https://internal/create', { method: 'POST', body: JSON.stringify({ roomCode, ...extra }) }),
+    );
+    if (res.ok) return roomCode;
+  }
+  return null;
+}
+
+/** Creates a Flip 7 room (retrying on the rare code collision). Returns null if none could be allocated. */
+async function createFlip7Room(env: Env): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const roomCode = generateRoomCode();
+    const res = await env.FLIP7_ROOM.getByName(roomCode).fetch(
+      new Request('https://internal/create', { method: 'POST', body: JSON.stringify({ roomCode }) }),
+    );
+    if (res.ok) return roomCode;
+  }
+  return null;
+}
+
+async function createSixNimmtRoom(env: Env): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const roomCode = generateRoomCode();
+    const res = await env.SIXNIMMT_ROOM.getByName(roomCode).fetch(
+      new Request('https://internal/create', { method: 'POST', body: JSON.stringify({ roomCode }) }),
     );
     if (res.ok) return roomCode;
   }
@@ -170,11 +195,25 @@ async function handleTelegramCommand(cmd: TelegramCommand, env: Env, origin: str
         : '⚫ Could not start an Omok game right now — please try again.');
       return;
     }
+    case 'newsixnimmt': {
+      const roomCode = await createSixNimmtRoom(env);
+      await sendMessage(token, cmd.chatId, roomCode
+        ? `🐂 ${who} started 6 nimmt! (2–10 players)!\nJoin → ${origin}/sixnimmt/#${roomCode}`
+        : 'Could not start 6 nimmt! Please try again.');
+      return;
+    }
     case 'newwordagents': {
       const roomCode = await createWordAgentsRoom(env);
       await sendMessage(token, cmd.chatId, roomCode
         ? `🕵️ ${who} started Word Agents (4–12 players)!\nJoin → ${origin}/wordagents/#${roomCode}`
         : 'Could not start Word Agents. Please try again.');
+      return;
+    }
+    case 'newflip7': {
+      const roomCode = await createFlip7Room(env);
+      await sendMessage(token, cmd.chatId, roomCode
+        ? `🎲 ${who} started Flip 7 (3–12 players)!\nJoin → ${origin}/flip7/#${roomCode}`
+        : 'Could not start Flip 7. Please try again.');
       return;
     }
     case 'leaderboard': {
@@ -493,6 +532,29 @@ export default {
       return env.CONNECT4_ROOM.getByName(room).fetch(new Request('https://internal/debug/patch', { method: 'POST', body: await request.text() }));
     }
 
+    // --- 6 nimmt! (casual multiplayer) ---
+    if (url.pathname === '/api/sixnimmt/create' && request.method === 'POST') {
+      if (!await getAuthClaims(request, env.JWT_SECRET)) return Response.json({ error: 'Sign in to create a room' }, { status: 401 });
+      const roomCode = await createSixNimmtRoom(env);
+      return roomCode ? Response.json({ roomCode }) : Response.json({ error: 'Could not allocate a room' }, { status: 503 });
+    }
+    if (url.pathname === '/api/sixnimmt/ws') {
+      const roomCode = url.searchParams.get('room')?.toUpperCase();
+      if (!roomCode || !/^[A-Z0-9]{4}$/.test(roomCode)) return new Response('Missing room code', { status: 400 });
+      if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 426 });
+      const token = url.searchParams.get('token');
+      const claims = token ? await verifyJwt(token, env.JWT_SECRET) : null;
+      const forward = new URL('https://internal/ws');
+      if (claims && /^\d+$/.test(claims.sub)) {
+        forward.searchParams.set('playerId', `tg_${claims.sub}`);
+        const user = await getUser(env.DB, Number(claims.sub)).catch(() => null);
+        forward.searchParams.set('name', normalizePlayerName(user?.display_name) || normalizePlayerName(claims.name) || 'Player');
+      } else {
+        forward.searchParams.set('playerId', `guest_${crypto.randomUUID()}`);
+      }
+      return env.SIXNIMMT_ROOM.getByName(roomCode).fetch(new Request(forward, request));
+    }
+
     // --- Word Agents (unranked teams) ---
     if (url.pathname === '/api/wordagents/create' && request.method === 'POST') {
       if (!await getAuthClaims(request, env.JWT_SECRET)) return Response.json({ error: 'Sign in to create a room' }, {status: 401});
@@ -520,6 +582,35 @@ export default {
         forward.searchParams.set('playerId', `guest_${guest || crypto.randomUUID()}`);
       }
       return env.WORDAGENTS_ROOM.getByName(roomCode).fetch(new Request(forward.toString(), request));
+    }
+
+    // --- Flip 7 (casual) ---
+    if (url.pathname === '/api/flip7/create' && request.method === 'POST') {
+      if (!await getAuthClaims(request, env.JWT_SECRET)) return Response.json({ error: 'Sign in to create a room' }, {status: 401});
+      const roomCode = await createFlip7Room(env);
+      return roomCode ? Response.json({ roomCode }) : Response.json({ error: 'Could not allocate a room' }, { status: 503 });
+    }
+
+    if (url.pathname === '/api/flip7/ws') {
+      const roomCode = url.searchParams.get('room')?.toUpperCase();
+      if (!roomCode || !/^[A-Z0-9]{4}$/.test(roomCode)) return new Response('Missing room code', { status: 400 });
+      // Only a verified JWT yields a tg_ id (which the room requires to take a seat).
+      // Anyone else connects as a guest and can only watch.
+      const forward = new URL(request.url);
+      const token = forward.searchParams.get('token');
+      const claims = token ? await verifyJwt(token, env.JWT_SECRET) : null;
+      forward.searchParams.delete('token');
+      forward.searchParams.delete('name');
+      if (claims) {
+        forward.searchParams.set('playerId', `tg_${claims.sub}`);
+        const user = await getUser(env.DB, Number(claims.sub)).catch(() => null);
+        const name = normalizePlayerName(user?.display_name) || normalizePlayerName(claims.name);
+        if (name) forward.searchParams.set('name', name);
+      } else {
+        const guest = (forward.searchParams.get('playerId') ?? '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 64);
+        forward.searchParams.set('playerId', `guest_${guest || crypto.randomUUID()}`);
+      }
+      return env.FLIP7_ROOM.getByName(roomCode).fetch(new Request(forward.toString(), request));
     }
 
     // --- Omok (1v1) ---
