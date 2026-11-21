@@ -215,3 +215,54 @@ describe('Flip 7 public action and bust presentation', () => {
     expect(gameView(g).events[0].card.type).toBe('secondChance');
   });
 });
+
+describe('Flip 7 most recently dealt public card', () => {
+  it('shows only the final opening deal, then records score modifiers and a bust monotonically', () => {
+    let g = make(n(1), n(2), n(3), m(10), a('double'), n(3), n(12));
+    expect(gameView(g).lastDraw).toEqual({ id: 3, actorId: 'c', card: n(3) });
+    expect(gameView(g).lastDraw?.card).not.toBe(g.lastDraw?.card);
+    g = play(g, 'a', 'hit');
+    expect(gameView(g).lastDraw).toEqual({ id: 4, actorId: 'a', card: m(10) });
+    g = play(JSON.parse(JSON.stringify(g)), 'b', 'hit');
+    expect(gameView(g).lastDraw).toEqual({ id: 5, actorId: 'b', card: a('double') });
+    g = play(g, 'c', 'hit');
+    const view = gameView(g);
+    expect(view.lastDraw).toEqual({ id: 6, actorId: 'c', card: n(3) });
+    expect(view.players[2].status).toBe('busted');
+    expect(JSON.stringify(view)).not.toContain('"value":12');
+  });
+
+  it('updates the center for a dealt action and the final card among forced draws', () => {
+    let g = make(n(1), n(2), n(3), a('flipThree'), a('secondChance'), n(2), n(6), n(12));
+    g = play(g, 'a', 'hit');
+    expect(gameView(g).lastDraw).toEqual({ id: 4, actorId: 'a', card: a('flipThree') });
+    g = play(g, 'a', 'target', 'b');
+    expect(gameView(g).lastDraw).toEqual({ id: 7, actorId: 'b', card: n(6) });
+    expect(gameView(g).players[1].numbers).toEqual([2, 6]);
+  });
+
+  it('uses null for a pre-feature saved game and does not record a Stay as a draw', () => {
+    const g = make(n(1), n(2), n(3), n(4));
+    delete g.lastDraw;
+    delete g.drawSequence;
+    const legacy = JSON.parse(JSON.stringify(g));
+    expect(gameView(legacy).lastDraw).toBeNull();
+    const stayed = play(legacy, 'a', 'stay');
+    expect(gameView(stayed).lastDraw).toBeNull();
+    expect(gameView(play(stayed, 'b', 'hit')).lastDraw).toEqual({ id: 1, actorId: 'b', card: n(4) });
+  });
+
+  it('resets the old round presentation if the next deal draws nothing', () => {
+    let g = make(n(1), n(2), n(3));
+    g = play(g, 'a', 'stay');
+    g = play(g, 'b', 'stay');
+    g = play(g, 'c', 'stay');
+    expect(gameView(g).lastDraw).toEqual({ id: 3, actorId: 'c', card: n(3) });
+    // Synthetic persisted round without held/discard cards to exercise an empty opening deal.
+    for (const player of g.players) player.held = [];
+    const next = play(g, 'a', 'nextRound');
+    expect(gameView(next).round).toBe(2);
+    expect(gameView(next).lastDraw).toBeNull();
+    expect(next.drawSequence).toBe(3);
+  });
+});

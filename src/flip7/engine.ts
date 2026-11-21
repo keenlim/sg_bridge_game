@@ -52,6 +52,9 @@ export interface Game {
   pending: Choice | null;
   events?: PublicEvent[];
   eventSequence?: number;
+  /** Public reveal only. Missing in older persisted games. */
+  lastDraw?: { id: number; actorId: string; card: Card } | null;
+  drawSequence?: number;
 }
 export type Move = { type: 'hit' | 'stay' | 'target' | 'nextRound'; playerId?: string };
 
@@ -103,6 +106,7 @@ function startRound(game: Game): void {
   const previousEventId = game.eventSequence ?? 0;
   game.round++;
   game.events = [];
+  game.lastDraw = null;
   game.phase = 'dealing';
   game.cursor = game.dealer;
   game.flippedBy = null;
@@ -176,6 +180,8 @@ function draw(game: Game, player: Player, sourceActionId?: number): ActionType |
     endRound(game);
     return;
   }
+  game.drawSequence = (game.drawSequence ?? game.lastDraw?.id ?? 0) + 1;
+  game.lastDraw = { id: game.drawSequence, actorId: player.id, card: { ...card } };
   if (card.type === 'freeze' || card.type === 'flipThree' || card.type === 'secondChance') {
     recordEvent(game, { type: 'actionDrawn', actorId: player.id, card });
   }
@@ -328,6 +334,8 @@ export function gameView(game: Game) {
     id: game.id, phase: game.phase, round: game.round, dealerId: game.players[game.dealer].id,
     turnId: game.turnId, deckCount: game.deck.length, winnerId: game.winnerId, flippedBy: game.flippedBy,
     events: (game.events ?? []).slice(-PUBLIC_EVENT_LIMIT).map(event => ({ ...event, card: { ...event.card } })),
+    lastDraw: game.lastDraw
+      ? { id: game.lastDraw.id, actorId: game.lastDraw.actorId, card: { ...game.lastDraw.card } } : null,
     players: game.players.map(p => ({
       id: p.id, total: p.total, status: p.status, numbers: p.numbers.slice(), bonuses: p.bonuses.slice(),
       bustCard: bustEvidence(p),

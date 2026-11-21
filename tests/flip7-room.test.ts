@@ -121,9 +121,11 @@ it('broadcasts action sequences and exact forced bust evidence, persists them, a
     const host = await connect(ids[0]); sockets.push(host);
     const watcher = await connect('guest_evidence'); sockets.push(watcher);
     await expect.poll(() => host.state()?.game?.id).toBe(game.id);
+    expect(host.state().game.lastDraw).toEqual({ id: 3, actorId: ids[2], card: { type: 'number', value: 3 } });
     host.send({ type: 'hit', gameId: game.id, revision: host.state().revision });
     await expect.poll(() => watcher.state()?.game.pending?.type).toBe('flipThree');
     expect(watcher.state().game.events.at(-1)).toMatchObject({ type: 'actionDrawn', card: { type: 'flipThree' } });
+    expect(watcher.state().game.lastDraw).toEqual({ id: 4, actorId: ids[0], card: { type: 'flipThree' } });
     host.send({ type: 'target', playerId: ids[1], gameId: game.id, revision: host.state().revision });
     await expect.poll(() => watcher.state()?.game.players[1].status).toBe('busted');
     const view = watcher.state().game;
@@ -132,6 +134,8 @@ it('broadcasts action sequences and exact forced bust evidence, persists them, a
     expect(JSON.stringify(view)).not.toContain('"value":12');
     const saved: any = await (await room.fetch('https://test/__state')).json();
     expect(saved.game.events).toEqual(view.events);
+    expect(view.lastDraw).toEqual({ id: 7, actorId: ids[1], card: { type: 'number', value: 2 } });
+    expect(saved.game.lastDraw).toEqual(view.lastDraw);
     expect(saved.game.players[1].bustCard).toEqual(view.players[1].bustCard);
     const rejoined = await connect(ids[1]); sockets.push(rejoined);
     await expect.poll(() => rejoined.state()?.game).toEqual(view);

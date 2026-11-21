@@ -7,6 +7,7 @@
   const TERMINAL_CLOSE_CODES = [4401, 4403, 4404, 4409];
   let profile=null, view=null, socket=null, room='', ready=false, pending=false, generation=0, retry=null, heartbeat=null, timeout=null, leaving=false;
   let connectTimeout=null, retryDelay=1500, terminalClose=false;
+  let inspectionKey=null, inspectedId=null, localActionKey=null;
   const name = id => view?.players.find(p=>p.id===id)?.name || 'Player';
   const me = () => view?.you?.id;
   const host = () => !!me() && view?.hostId===me();
@@ -127,6 +128,122 @@
       : `${name(choice.actorId)} is choosing a player. Everyone will see the result.`));
     area.append(copy);
   }
+  function updateInspection(defaultId) {
+    const selectedId = inspectedId || defaultId;
+    for (const seat of $('oval-seats').children) {
+      seat.setAttribute('aria-pressed', String(seat.dataset.seatId === selectedId));
+    }
+    for (const hand of $('players').children) {
+      hand.classList.toggle('is-inspected', hand.dataset.playerId === selectedId);
+    }
+  }
+
+  function revealedFace(draw, busted) {
+    const exposed = draw.card;
+    const face = exposed.type === 'number' ? card(exposed.value)
+      : exposed.type === 'bonus' ? card(`+${exposed.value}`, 'special')
+      : exposed.type === 'double' ? card('×2','special') : card(exposed.type,'action');
+    face.id = 'revealed-card';
+    if (busted) {
+      face.classList.add('bust-card');
+      face.setAttribute('aria-label', `${exposed.value} duplicate number card · Bust`);
+      face.append(make('b','bust-stamp','BUST'));
+    }
+    return face;
+  }
+
+  function renderOval(game) {
+    const table = $('oval-table');
+    const seats = $('oval-seats');
+    const deck = $('deck-count');
+    const caption = $('reveal-caption');
+    const slot = $('deal-face');
+    table.hidden = $('hand-guide').hidden = !game;
+    const choice = game?.pending;
+    const matchingAction = !!(choice && game.lastDraw?.actorId === choice.actorId && game.lastDraw.card.type === choice.type);
+    $('action-spotlight').classList.toggle('f7-centre-has-action', matchingAction);
+    $('latest-play').classList.toggle('f7-repeated-action', !!(matchingAction
+      && $('latest-event').textContent === `${name(choice.actorId)} drew ${names[choice.type]}.`));
+    $('players').classList.toggle('f7-in-play', !!game);
+    $('players').classList.toggle('f7-crowded', (game?.players.length || 0) > 6);
+    if (!game) {
+      inspectionKey = inspectedId = localActionKey = null;
+      seats.replaceChildren();
+      slot.replaceChildren();
+      delete slot.dataset.drawKey;
+      caption.textContent = '';
+      return;
+    }
+    const key = `${view.roomCode}:${game.id}`;
+    if (key !== inspectionKey || !game.players.some(p => p.id === inspectedId)) inspectedId = null;
+    inspectionKey = key;
+    const ownSeat = game.players.findIndex(p => p.id === me());
+    // Use gameplay evidence, not room revisions or connectivity, to detect a new decision.
+    const nextActionKey = ownSeat === -1 ? null
+      : choice ? (choice.actorId === me() ? `${game.round}:target:${choice.type}:${game.events?.at(-1)?.id ?? ''}` : null)
+      : game.phase === 'playing' && game.turnId === me() && game.players[ownSeat].status === 'active'
+        ? `${game.round}:turn:${game.lastDraw?.id ?? ''}` : null;
+    if (nextActionKey && nextActionKey !== localActionKey) inspectedId = null;
+    localActionKey = nextActionKey;
+    const dealerSeat = game.players.findIndex(p => p.id === game.dealerId);
+    const anchor = ownSeat !== -1 ? ownSeat : Math.max(0, dealerSeat);
+    const players = [...game.players.slice(anchor), ...game.players.slice(0,anchor)];
+    const draw = game.lastDraw;
+    const drawPlayer = draw && game.players.find(p => p.id === draw.actorId);
+    const bust = !!(drawPlayer?.status === 'busted' && draw.card.type === 'number'
+      && drawPlayer.bustCard?.value === draw.card.value);
+    const count = `${game.deckCount} ${game.deckCount === 1 ? 'card' : 'cards'}`;
+    if (deck.textContent !== count) deck.textContent = count;
+    const drawKey = draw ? `${key}:${game.round}:${draw.id}:${bust}` : '';
+    const message = draw ? (bust ? `${name(draw.actorId)} busted on ${draw.card.value}.` : `${name(draw.actorId)} drew ${draw.card.type === 'number' ? draw.card.value : draw.card.type === 'bonus' ? `+${draw.card.value}` : draw.card.type === 'double' ? '×2' : names[draw.card.type]}.`) : 'No card revealed yet.';
+    if (slot.dataset.drawKey !== drawKey) {
+      slot.dataset.drawKey = drawKey;
+      slot.replaceChildren(draw ? revealedFace(draw,bust) : make('div','f7-card-placeholder','?'));
+    }
+    if (caption.textContent !== message) caption.textContent = message;
+    const defaultId = game.players[ownSeat]?.id || draw?.actorId || game.events?.at(-1)?.actorId
+      || game.turnId || game.dealerId || players[0]?.id;
+    const focusedSeat = seats.contains(document.activeElement) ? document.activeElement.dataset.seatId : null;
+    const crowded = players.length > 6;
+    const previewLimit = crowded ? 2 : 3;
+    table.classList.toggle('f7-many-seats', crowded);
+    seats.replaceChildren(...players.map((p,i) => {
+      const angle = (ownSeat === -1 ? Math.PI : 0) + (2 * Math.PI * i / players.length);
+      const participant = view.players.find(item => item.id === p.id);
+      const eligible = !!game.pending?.targets.includes(p.id);
+      const current = game.turnId === p.id;
+      const chooser = game.pending?.actorId === p.id;
+      const dealer = game.dealerId === p.id;
+      const seat = button('', () => { inspectedId=p.id; updateInspection(defaultId); }, false, 'f7-seat');
+      seat.dataset.seatId = p.id;
+      seat.style.setProperty('--seat-x', String(-Math.sin(angle)));
+      seat.style.setProperty('--seat-y', String(Math.cos(angle)));
+      seat.classList.toggle('f7-seat-current', current || chooser);
+      seat.classList.toggle('f7-seat-eligible', eligible);
+      seat.classList.toggle('f7-seat-busted', p.status === 'busted');
+      const displayName = name(p.id);
+      const labels = [p.id === me() ? 'You' : '', dealer ? 'Dealer' : '', current ? 'Current turn' : '',
+        chooser ? 'Choosing target' : '', eligible ? 'Eligible target' : '', p.status !== 'active' ? p.status : '', participant?.connected === false ? 'Offline' : ''];
+      seat.setAttribute('aria-label',[displayName,...labels.filter(Boolean)].join(', '));
+      seat.title = [displayName,...labels.filter(Boolean)].join(' · ');
+      const dot = make('span','f7-seat-dot',dealer ? 'D' : current ? '●' : p.id === me() ? 'YOU' : chooser ? '!' : eligible ? '◇' : p.status === 'busted' ? '×' : '');
+      dot.setAttribute('aria-hidden','true');
+      const heading = make('span','f7-seat-heading');
+      heading.append(make('span','f7-seat-name',displayName),dot);
+      seat.append(heading);
+      const ranks = [...p.numbers.map(String),...p.bonuses.map(n => `+${n}`),...(p.doubled ? ['×2'] : []),...(p.secondChance ? ['↺'] : []),...(p.bustCard ? [String(p.bustCard.value)] : [])];
+      const preview = make('span','f7-seat-preview');
+      preview.setAttribute('aria-hidden','true');
+      for (const rank of ranks.slice(0,previewLimit)) preview.append(make('span','f7-rank',rank));
+      if (ranks.length > previewLimit) preview.append(make('span','f7-rank-more',`+${ranks.length-previewLimit}`));
+      if (!ranks.length) preview.append(make('span','f7-rank-empty','—'));
+      seat.append(preview);
+      return seat;
+    }));
+    updateInspection(defaultId);
+    if (focusedSeat) [...seats.children].find(seat => seat.dataset.seatId === focusedSeat)?.focus({preventScroll:true});
+  }
+
   function render() {
     $('home').hidden=!!room;$('room').hidden=!room;if(!view||!room)return;
     $('code').textContent=view.roomCode;$('watchers').textContent=`${view.watchers||0} watching · ${view.players.length}/${view.maxPlayers||12} seats`;
@@ -143,6 +260,7 @@
       if(game?.pending?.actorId===p.id)tile.append(make('span','chooser-label','Choosing an action target'));
       if(host()&&!game&&p.id!==me())tile.append(button('Remove '+p.name,()=>send('kick',{playerId:p.id}),!active(),'quiet danger'));roster.append(tile);
     }
+    renderOval(game);
     $('standings').replaceChildren();const standings=game?[...game.players].sort((a,b)=>b.total-a.total):view.players.map(p=>({id:p.id,total:0}));standings.forEach((p,i)=>{const row=make('div','standing');row.append(make('span','',`${i+1}. ${name(p.id)}`),make('b','',String(p.total)));$('standings').append(row);});
     const actions=$('actions');actions.replaceChildren();$('summary').hidden=true;$('abandon').hidden=!(host()&&game&&!['finished'].includes(game.phase));$('abandon').disabled=!active();
     if(!game){$('round-label').textContent='THE TABLE IS OPEN';$('headline').textContent='Take a seat.';$('hint').textContent=`Invite your friends. ${view.minPlayers||3} connected players needed to start.`;

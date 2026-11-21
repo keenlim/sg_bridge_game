@@ -115,7 +115,7 @@ h3 { font-size: 15px; margin-bottom: 12px; }
 .player-score small { display: block; color: #90a1ba; font-size: 8px; text-align: right; font-weight: 600; margin-top: 4px; }
 .cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 /* Override Bridge's shared .card interaction rules: these faces are read-only. */
-.cards .card, .action-spotlight > .card {
+.cards .card, :is(.action-spotlight, .f7-deal-face) > .card {
   --card-hue: 180;
   width: 54px; height: 78px; aspect-ratio: auto; margin: 0; flex-shrink: 0;
   position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: center;
@@ -151,13 +151,13 @@ h3 { font-size: 15px; margin-bottom: 12px; }
   background: radial-gradient(ellipse at 0 0, #27625e55, transparent 70%), #111d2d;
   box-shadow: 0 8px 30px #0003;
 }
-.action-spotlight > .card { width: 86px; height: 122px; border-radius: 10px; padding: 8px; }
-.action-spotlight > .card .card-type { font-size: 8px; }
-.action-spotlight > .card .card-face { font-size: 17px; }
-.action-spotlight > .card .card-symbol { font-size: 35px; }
-.action-spotlight > .card.action-freeze { color: #123b66; border-color: #8ac7ff; background: linear-gradient(145deg, #effaff, #a5d7f5); }
-.action-spotlight > .card.action-flipThree { color: #47300c; border-color: #f8d36c; background: linear-gradient(145deg, #fff8df, #f4d17f); }
-.action-spotlight > .card.action-secondChance { color: #522333; border-color: #ffb1ae; background: linear-gradient(145deg, #fff1eb, #f5b4bd); }
+:is(.action-spotlight, .f7-deal-face) > .card { width: 86px; height: 122px; border-radius: 10px; padding: 8px; }
+:is(.action-spotlight, .f7-deal-face) > .card .card-type { font-size: 8px; }
+:is(.action-spotlight, .f7-deal-face) > .card .card-face { font-size: 17px; }
+:is(.action-spotlight, .f7-deal-face) > .card .card-symbol { font-size: 35px; }
+:is(.action-spotlight, .f7-deal-face) > .card.action-freeze { color: #123b66; border-color: #8ac7ff; background: linear-gradient(145deg, #effaff, #a5d7f5); }
+:is(.action-spotlight, .f7-deal-face) > .card.action-flipThree { color: #47300c; border-color: #f8d36c; background: linear-gradient(145deg, #fff8df, #f4d17f); }
+:is(.action-spotlight, .f7-deal-face) > .card.action-secondChance { color: #522333; border-color: #ffb1ae; background: linear-gradient(145deg, #fff1eb, #f5b4bd); }
 .action-copy { min-width: 0; }
 .action-copy h2 { font-size: 22px; overflow-wrap: anywhere; margin-bottom: 8px; }
 .action-copy p:not(.eyebrow) { font-size: 13px; color: #b9cbe0; max-width: 620px; margin-bottom: 8px; }
@@ -216,10 +216,10 @@ dialog h3 { margin-top: 22px; color: var(--f7-gold); }
   .cards .card.special .card-face { font-size: 22px; }
   .card.action .card-symbol { font-size: 19px; }
   .action-spotlight { padding: 12px; gap: 12px; margin-bottom: 12px; }
-  .action-spotlight > .card { width: 68px; height: 100px; }
-  .action-spotlight > .card .card-face { font-size: 14px; }
-  .action-spotlight > .card .card-symbol { font-size: 28px; }
-  .action-spotlight > .card .card-type { font-size: 6px; }
+  :is(.action-spotlight, .f7-deal-face) > .card { width: 68px; height: 100px; }
+  :is(.action-spotlight, .f7-deal-face) > .card .card-face { font-size: 14px; }
+  :is(.action-spotlight, .f7-deal-face) > .card .card-symbol { font-size: 28px; }
+  :is(.action-spotlight, .f7-deal-face) > .card .card-type { font-size: 6px; }
   .action-copy h2 { font-size: 17px; }
   .action-copy p:not(.eyebrow) { font-size: 11px; line-height: 1.5; }
   .action-dock { gap: 7px; padding-bottom: 12px; }
@@ -235,3 +235,121 @@ dialog h3 { margin-top: 22px; color: var(--f7-gold); }
 .latest-play .eyebrow { flex-shrink:0; color:var(--f7-teal); margin:0; }
 .latest-play #latest-event { margin:0; border:0; padding:0; }
 @media(max-width:620px) { .latest-play { display:block; padding:10px 12px; margin-bottom:12px; } .latest-play .eyebrow { display:block; margin-bottom:4px; } }
+
+
+/* The visual table is separate from the full, accessible face-up hands. */
+.f7-oval-table {
+  --seat-rx: 39%; --seat-ry: 39%;
+  position: relative; isolation: isolate; container-type: inline-size;
+  width: 100%; height: clamp(320px, 58vw, 440px); margin: 4px 0 18px;
+}
+.f7-felt {
+  position: absolute; inset: 11px 12px; border-radius: 50%;
+  border: 8px solid transparent;
+  background: radial-gradient(ellipse at 50% 32%, #31785c, #164734 65%, #102f27) padding-box,
+    linear-gradient(145deg,#a47142,#74482f 32%,#41251e 79%,#865534) border-box;
+  box-shadow: 0 0 0 1px #af85586e, 0 18px 30px #0006, inset 0 0 60px #062714a0, inset 0 0 0 1px #301a16;
+  pointer-events: none;
+}
+.f7-felt::after {
+  content: ''; position: absolute; inset: 9px; border: 1px dashed #d9e2bb48;
+  border-radius: 50%;
+}
+.f7-deal {
+  position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(42%, 248px); text-align: center;
+}
+.f7-deal > .eyebrow {
+  color: #fff0af; white-space: nowrap; font-size: clamp(8px, 2.35cqw, 11px); margin-bottom: 9px;
+}
+.f7-deal-cards { display: flex; justify-content: center; align-items: start; gap: clamp(7px, 2.4cqw, 15px); }
+.f7-deck { display: grid; justify-items: center; gap: 6px; flex: none; }
+.f7-deck-back {
+  display: grid; place-items: center; width: clamp(37px, 12cqw, 67px); height: clamp(55px, 17.25cqw, 99px);
+  border-radius: 7px; border: 2px solid #ead6ab; color: #ffe18f;
+  font-size: clamp(17px, 5cqw, 38px); font-weight: 850;
+  background:
+    radial-gradient(ellipse at center, #334769, transparent 66%),
+    repeating-linear-gradient(45deg,#131f36 0 4px,#243b59 4px 5px,#14233b 5px 9px);
+  box-shadow: inset 0 0 0 2px #101a2c, 2px 3px #bd9c69, 4px 6px #312324, 0 8px 12px #072317b0;
+}
+#deck-count { color: #e0ead6; white-space: nowrap; font-size: clamp(8px, 2.7cqw, 11px); }
+.f7-deal-face > .card, .f7-card-placeholder {
+  width: clamp(45px, 17cqw, 84px); height: clamp(66px, 24cqw, 118px);
+}
+.f7-deal-face > .card {
+  padding: clamp(4px, 1.2cqw, 8px); border-radius: 8px;
+}
+.f7-deal-face > .card .card-type { font-size: clamp(5px, 1.45cqw, 8px); }
+.f7-deal-face > .card:not(.action) .card-face { font-size: clamp(24px, 8.2cqw, 44px); }
+.f7-deal-face > .card.action .card-face { font-size: clamp(9px, 2.85cqw, 16px); }
+.f7-deal-face > .card.action .card-symbol { font-size: clamp(16px, 6.6cqw, 32px); }
+.f7-deal-face > .card.special { border-color: #e6b95a; background: linear-gradient(145deg,#fff5db,#f2d38b); }
+.f7-deal-face > .card.bust-card { border-color: #ff455c; }
+.f7-card-placeholder {
+  display: grid; place-items: center; border: 1px dashed #bcdab27a; border-radius: 8px;
+  background: #1438268f; font-weight: 800; font-size: 20px; color: #bad5b7;
+}
+#reveal-caption {
+  margin: 8px 0 0; color: #fbf5e3; font-size: clamp(10px, 3cqw, 14px);
+  font-weight: 700; overflow-wrap: anywhere;
+}
+.f7-oval-seats { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+#oval-seats .f7-seat {
+  position: absolute; pointer-events: auto;
+  top: calc(50% + var(--seat-y) * var(--seat-ry)); left: calc(50% + var(--seat-x) * var(--seat-rx));
+  transform: translate(-50%,-50%);
+  display: grid; align-content: center; gap: 3px; min-width: 44px; min-height: 44px;
+  width: clamp(51px, 19cqw, 112px); padding: 4px 5px; border: 1px solid #a2b39689;
+  border-radius: 10px; background: linear-gradient(#263b38,#152823); text-align: center;
+  box-shadow: 0 3px 9px #0007; line-height: 1.2;
+}
+#oval-seats .f7-seat:hover { background: #294b3e; }
+.f7-seat-heading { display: flex; justify-content: center; gap: 3px; align-items: center; min-width: 0; }
+.f7-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(9px, 3cqw, 13px); }
+.f7-seat-dot { color: #ffe29b; font-size: 8px; font-weight: 850; }
+.f7-seat-dot:empty { display: none; }
+.f7-seat-preview { display: flex; justify-content: center; gap: 2px; align-items: center; font-size: clamp(8px, 2.55cqw, 11px); }
+.f7-rank { border-radius: 2px; min-width: 10px; padding: 1px 2px; background: #e9eee0; color: #123129; font-weight: 850; }
+.f7-rank-more, .f7-rank-empty { color: #d5dece; }
+#oval-seats .f7-seat-current { border-color: #f5c451; }
+#oval-seats .f7-seat-busted { background: #3e2530; border-color: #f7838e; }
+#oval-seats .f7-seat-eligible { border: 2px dashed #5effd5; }
+#oval-seats .f7-seat[aria-pressed="true"] { box-shadow: 0 0 0 2px #72eace, 0 3px 10px #0008; }
+#oval-seats .f7-seat:focus-visible { outline-offset: 4px; z-index: 2; }
+.f7-many-seats { --seat-rx: 39%; --seat-ry: 42%; }
+.f7-many-seats #oval-seats .f7-seat { width: clamp(44px, 13.5cqw, 78px); padding-inline: 3px; }
+.f7-hand-guide { display: flex; justify-content: space-between; gap: 5px 12px; flex-wrap: wrap; align-items: baseline; margin: 0 0 8px; }
+.f7-hand-guide b { font-size: 14px; }
+.f7-hand-guide span { color: #9fb4a9; font-size: 11px; }
+.players.f7-in-play .player.is-inspected { border-color: #65dfca80; }
+.players.f7-in-play.f7-crowded { grid-template-columns: 1fr; }
+.players.f7-in-play.f7-crowded .player:not(.is-inspected) { display: none; }
+.table-main:has(.f7-oval-table:not([hidden])) { background: radial-gradient(ellipse at 50% 20%,#2742306e, #0b1623b3 80%); }
+@media (max-width: 900px) {
+  .table-layout { grid-template-columns: 1fr; }
+  .side { position: static; }
+}
+@media (max-width: 620px) {
+  .f7-oval-table { --seat-rx: 38%; --seat-ry: 40%; height: clamp(314px, 88vw, 390px); margin-top: 10px; }
+  .f7-oval-table.f7-many-seats { --seat-rx: 39%; --seat-ry: 42%; }
+  .f7-felt { inset: 11px 6px; border-width: 6px; }
+  .f7-felt::after { inset: 6px; }
+  .players.f7-in-play .player:not(.is-inspected) { display: none; }
+  .table-main:has(.f7-oval-table:not([hidden])) .action-dock {
+    position: sticky; top: 0; z-index: 4; padding: 7px 6px;
+    margin-inline: -4px; background: #101d24; border-radius: 10px;
+  }
+}
+@container (max-width: 350px) {
+  .f7-many-seats .f7-seat-preview { gap: 1px; }
+  .f7-many-seats .f7-rank { padding-inline: 1px; }
+  .f7-many-seats .f7-seat-dot { display: none; }
+}
+
+@media (max-width: 620px) {
+  /* The same draw is already captioned on the felt and explained here. */
+  .latest-play.f7-repeated-action { display: none; }
+  .action-spotlight.f7-centre-has-action > .card { display: none; }
+  .action-spotlight.f7-centre-has-action { padding-block: 10px; }
+}

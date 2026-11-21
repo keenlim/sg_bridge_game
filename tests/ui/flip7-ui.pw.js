@@ -180,3 +180,66 @@ for(const [label,type,targetId,actionBatchId,bustBatchId] of [
  await page.locator('#activity summary').click();
  await expect(page.locator('#activity li').filter({hasText:'Alex used'})).toBeVisible();
 });
+
+test('oval seats rotate clockwise from you and show the exact server-revealed modifier',async({page})=>{
+ await page.setViewportSize({width:1280,height:844});const s=initial();s.game.lastDraw={id:1,actorId:'b',card:{type:'bonus',value:4}};
+ await setup(page,s);const table=page.locator('#oval-table'), seats=table.locator('[data-seat-id]');
+ await expect(seats).toHaveCount(3);expect(await seats.evaluateAll(list=>list.map(el=>el.dataset.seatId))).toEqual(['me','b','c']);
+ const pos=await Promise.all(['me','b','c'].map(id=>table.locator(`[data-seat-id="${id}"]`).boundingBox()));
+ expect(pos[0].y).toBeGreaterThan(Math.max(pos[1].y,pos[2].y));expect(pos[1].x).toBeLessThan(pos[2].x);
+ await expect(table.locator('#revealed-card')).toHaveAccessibleName('+4 modifier card');
+ await expect(table.locator('#reveal-caption')).toContainText('Blair drew');
+ await expect(table.locator('#deck-count')).toHaveText('80 cards');
+ s.revision++;s.game.lastDraw=null;await push(page,s);await expect(table.locator('#revealed-card')).toHaveCount(0);
+ await expect(table.locator('#reveal-caption')).toContainText('No card revealed');
+});
+
+test('spectator table places the dealer at the top and shows authoritative duplicate outcome',async({page})=>{
+ const s=initial();s.you.id=null;s.game.lastDraw={id:1,actorId:'b',card:{type:'number',value:9}};
+ Object.assign(s.game.players[1],{status:'busted',roundScore:0,bustCard:{type:'number',value:9}});
+ await setup(page,s);const table=page.locator('#oval-table');
+ const dealer=table.locator('[data-seat-id="c"]');await expect(dealer).toBeVisible();
+ expect((await dealer.boundingBox()).y).toBeLessThan((await table.locator('[data-seat-id="me"]').boundingBox()).y);
+ await expect(table.locator('#revealed-card')).toHaveAccessibleName('9 duplicate number card · Bust');
+ await expect(table.locator('#reveal-caption')).toContainText('Blair busted');
+ await expect(table.locator('[data-seat-id="b"]')).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('button',{name:'Hit · draw a card'})).toBeDisabled();
+});
+
+for(const width of [320,390])test(`twelve oval seats stay individually readable and selectable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:844});const s=initial();
+ for(let i=3;i<12;i++){s.players.push({id:'p'+i,name:'Player '+i,connected:true});s.game.players.push({...s.game.players[1],id:'p'+i,numbers:[2,8,10,11],roundScore:31});}
+ await setup(page,s);const table=page.locator('#oval-table'), seats=table.locator('[data-seat-id]');
+ await expect(seats).toHaveCount(12);const boxes=await Promise.all((await seats.all()).map(seat=>seat.boundingBox()));
+ for(const [i,a] of boxes.entries()){
+   expect(a.height).toBeGreaterThanOrEqual(44);expect(a.width).toBeGreaterThanOrEqual(44);
+   expect(a.x).toBeGreaterThanOrEqual(0);expect(a.x+a.width).toBeLessThanOrEqual(width);
+   for(const b of boxes.slice(i+1)) expect(a.x+a.width<=b.x||b.x+b.width<=a.x||a.y+a.height<=b.y||b.y+b.height<=a.y).toBe(true);
+ }
+ const inspect=table.locator('[data-seat-id="p10"]');
+ await expect(inspect.getByText('+2',{exact:true})).toBeVisible();
+ await inspect.focus();await inspect.press('Enter');
+ await expect(inspect).toHaveAttribute('aria-pressed','true');await expect(inspect).toBeFocused();
+ await expect(page.locator('[data-player-id="p10"]').getByLabel('8 number card')).toBeVisible();
+ s.revision++;await push(page,s);await expect(inspect).toHaveAttribute('aria-pressed','true');await expect(inspect).toBeFocused();
+ await expect(page.locator('[data-player-id="me"] .cards')).not.toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('your turn and target choice bring back your hand once without moving focus',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const s=initial();s.game.turnId='b';
+ await setup(page,s);const yours=page.locator('#oval-seats [data-seat-id="me"]'), opposing=page.locator('#oval-seats [data-seat-id="b"]');
+ await opposing.click();
+ await expect(opposing).toHaveAttribute('aria-pressed','true');
+ s.revision++;s.game.turnId='me';await push(page,s);
+ await expect(yours).toHaveAttribute('aria-pressed','true');
+ await expect(opposing).toBeFocused();
+ await opposing.click();
+ s.revision++;s.players[2].connected=false;await push(page,s);
+ await expect(opposing).toHaveAttribute('aria-pressed','true');
+ s.revision++;s.game.pending={type:'freeze',actorId:'me',targets:['b']};await push(page,s);
+ await expect(yours).toHaveAttribute('aria-pressed','true');
+ await expect(opposing).toBeFocused();
+ await opposing.click();s.revision++;await push(page,s);
+ await expect(opposing).toHaveAttribute('aria-pressed','true');
+});
