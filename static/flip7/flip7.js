@@ -43,16 +43,98 @@
     };
     ws.onerror=()=>{};render();
   }
-  function card(value, kind='') {const n=make('div',`card ${kind}`);n.append(make('small','',kind==='shield'?'PROTECT':kind?'BONUS':'NUMBER'),make('span','',String(value)));return n;}
+  // All faces are original CSS artwork; the server owns cards and outcomes.
+  function card(value, kind='') {
+    const action = kind === 'action';
+    const modifier = kind === 'special';
+    const label = action ? names[value] : String(value);
+    const n = make('div', `card ${kind}${action ? ` action-${value}` : ''}`);
+    n.setAttribute('role', 'img');
+    n.setAttribute('aria-label', `${label} ${action ? 'action' : modifier ? 'modifier' : 'number'} card`);
+    if (!action && !modifier) n.style.setProperty('--card-hue', String((Number(value) * 27 + 175) % 360));
+    n.append(make('small', 'card-type', action ? 'ACTION CARD' : modifier ? 'SCORE MODIFIER' : 'NUMBER CARD'));
+    if (action) n.append(make('span', 'card-symbol', {freeze:'❄',flipThree:'↻',secondChance:'↺'}[value]));
+    n.append(make('span', 'card-face', label));
+    const corner = make('small', 'f7-card-corner', action ? 'FLIP 7' : String(value));
+    corner.setAttribute('aria-hidden', 'true');
+    n.append(corner);
+    return n;
+  }
+
+  function describeEvent(event) {
+    const who = name(event.actorId);
+    const action = names[event.card?.type] || 'an action card';
+    if (event.type === 'actionDrawn') return `${who} drew ${action}.`;
+    if (event.type === 'actionResolved') {
+      if (event.disposition === 'discarded') return `${who} discarded ${action}: no eligible player could receive it.`;
+      const targetId = event.targetId || event.actorId;
+      const target = targetId === event.actorId ? 'themself' : name(targetId);
+      const effect = event.card?.type === 'freeze' ? 'They bank their score and stop for this round.'
+        : event.card?.type === 'flipThree' ? 'They draw up to three cards, stopping at a Bust or Flip 7.'
+        : 'They can discard one duplicate Number Card.';
+      return `${who} used ${action} on ${target}. ${effect}`;
+    }
+    if (event.type === 'secondChanceUsed') return `${who} used Second Chance to discard a duplicate ${event.card?.value}.`;
+    if (event.type === 'bust') return `${who} busted on a duplicate ${event.card?.value}. Zero points this round.`;
+    return '';
+  }
+
+  function renderActivity(game) {
+    const events = (game?.events || []).filter(event => describeEvent(event)).slice(-8);
+    $('activity').hidden = events.length === 0;
+    $('latest-play').hidden = events.length === 0;
+    const lastEvent = events[events.length - 1];
+    const resolved = events.slice().reverse().find(event => event.type === 'actionResolved');
+    const latest = lastEvent ? [resolved && resolved.id !== lastEvent.id ? describeEvent(resolved) : '', describeEvent(lastEvent)].filter(Boolean).join(' ') : '';
+    // Presence updates must not re-announce an unchanged play.
+    const latestKey = events.length ? `${game.id}:${events[events.length - 1].id}` : '';
+    if ($('latest-event').dataset.eventKey !== latestKey) {
+      $('latest-event').dataset.eventKey = latestKey;
+      $('latest-event').textContent = latest;
+    }
+    $('activity-list').replaceChildren(...events.slice().reverse().map(event => {
+      const li = make('li', '', describeEvent(event));
+      li.dataset.eventId = String(event.id);
+      return li;
+    }));
+  }
+
+  function renderAction(game) {
+    const area = $('action-spotlight');
+    const choice = game?.pending;
+    area.hidden = !choice;
+    area.replaceChildren();
+    if (!choice) return;
+    area.dataset.action = choice.type;
+    area.append(card(choice.type, 'action'));
+    const copy = make('div', 'action-copy');
+    copy.append(make('p', 'eyebrow', 'ACTION DRAWN'));
+    copy.append(make('h2', '', `${name(choice.actorId)} drew ${names[choice.type]}.`));
+    const effects = {
+      freeze: 'Freeze makes an active player bank their score and stop for this round.',
+      flipThree: 'The chosen player draws up to three cards, stopping at a Bust or Flip 7.',
+      secondChance: 'Pass this extra Second Chance to an eligible player. It cancels one duplicate Number Card.',
+    };
+    copy.append(make('p', '', effects[choice.type]));
+    copy.append(make('p', 'selection-hint', choice.actorId === me() && seated()
+      ? 'Your choice: select an eligible player below.'
+      : `${name(choice.actorId)} is choosing a player. Everyone will see the result.`));
+    area.append(copy);
+  }
   function render() {
     $('home').hidden=!!room;$('room').hidden=!room;if(!view||!room)return;
     $('code').textContent=view.roomCode;$('watchers').textContent=`${view.watchers||0} watching · ${view.players.length}/${view.maxPlayers||12} seats`;
-    const game=view.game;const roster=$('players');roster.replaceChildren();
+    const game=view.game;renderActivity(game);renderAction(game);const roster=$('players');roster.replaceChildren();
     for(const p of view.players){const gp=game?.players.find(x=>x.id===p.id);const tile=make('article',`player ${gp?.status||''} ${game?.turnId===p.id?'current':''}`);tile.dataset.playerId=p.id;
+      const eligible = !!game?.pending?.targets.includes(p.id);
+      tile.classList.toggle('eligible-target', eligible);
+      tile.classList.toggle('action-chooser', game?.pending?.actorId === p.id);
       const head=make('div','player-head');head.append(make('span','avatar',p.name.slice(0,2).toUpperCase()));const info=make('div');info.append(make('div','player-name',p.name+(p.id===me()?' · you':'')),make('div','status',[p.id===view.hostId?'Host':null,p.connected?'Connected':'Offline',gp?.status,game?.turnId===p.id?'Taking a turn':null].filter(Boolean).join(' · ')));head.append(info);
       if(gp){const score=make('div','player-score',String(gp.roundScore));score.append(make('small','',gp.status==='busted'?'BUSTED':'THIS ROUND'));head.append(score);}
       tile.append(head);
-      if(gp){const cards=make('div','cards');for(const n of gp.numbers)cards.append(card(n));for(const n of gp.bonuses)cards.append(card(`+${n}`,'special'));if(gp.doubled)cards.append(card('×2','special'));if(gp.secondChance)cards.append(card('Save','shield'));if(!cards.children.length)cards.append(make('span','empty-cards','Waiting for the first card.'));tile.append(cards);}
+      if(gp){const cards=make('div','cards');for(const n of gp.numbers)cards.append(card(n));for(const n of gp.bonuses)cards.append(card(`+${n}`,'special'));if(gp.doubled)cards.append(card('×2','special'));if(gp.secondChance)cards.append(card('secondChance','action'));if(gp.bustCard){const duplicate=card(gp.bustCard.value);duplicate.classList.add('bust-card');duplicate.setAttribute('aria-label',`${gp.bustCard.value} duplicate number card · Bust`);duplicate.append(make('b','bust-stamp','BUST'));cards.append(duplicate);}if(!cards.children.length)cards.append(make('span','empty-cards','Waiting for the first card.'));tile.append(cards);if(gp.bustCard)tile.append(make('p','bust-explanation',`Duplicate ${gp.bustCard.value} · 0 points this round`));}
+      if(eligible)tile.append(make('span','target-label','Eligible target'));
+      if(game?.pending?.actorId===p.id)tile.append(make('span','chooser-label','Choosing an action target'));
       if(host()&&!game&&p.id!==me())tile.append(button('Remove '+p.name,()=>send('kick',{playerId:p.id}),!active(),'quiet danger'));roster.append(tile);
     }
     $('standings').replaceChildren();const standings=game?[...game.players].sort((a,b)=>b.total-a.total):view.players.map(p=>({id:p.id,total:0}));standings.forEach((p,i)=>{const row=make('div','standing');row.append(make('span','',`${i+1}. ${name(p.id)}`),make('b','',String(p.total)));$('standings').append(row);});

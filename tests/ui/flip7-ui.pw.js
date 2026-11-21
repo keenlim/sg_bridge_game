@@ -98,3 +98,67 @@ test('offline lobby exit explains that the seat remains reserved', async ({ page
   await expect(page.locator('#home')).toBeVisible();
   expect(await frames(page)).toEqual([]);
 });
+
+test('Second Chance is an action card with its official name, not a modifier', async ({ page }) => {
+ const s=initial();s.game.players[0].secondChance=true;s.game.players[0].doubled=true;s.game.players[0].bonuses=[4];await setup(page,s);
+ const hand=page.locator('[data-player-id="me"] .cards');
+ await expect(hand.getByLabel('Second Chance action card')).toBeVisible();
+ await expect(hand.getByLabel('×2 modifier card')).toBeVisible();
+ await expect(hand.getByLabel('+4 modifier card')).toBeVisible();
+ await expect(hand).not.toContainText('PROTECT');await expect(hand).not.toContainText('Save');
+});
+
+test('Freeze draws announce the chooser, legal targets and effect to actor and spectators', async ({page}) => {
+ const s=initial();s.game.pending={type:'freeze',actorId:'me',targets:['b']};
+ s.game.events=[{id:1,round:1,type:'actionDrawn',actorId:'me',card:{type:'freeze'}}];await setup(page,s);
+ await expect(page.locator('#action-spotlight')).toContainText('Alex drew Freeze');
+ await expect(page.locator('#action-spotlight')).toContainText('bank');
+ await expect(page.locator('[data-player-id="b"]')).toHaveClass(/eligible-target/);
+ await expect(page.locator('#activity')).toContainText('Alex drew Freeze');
+ s.you.id=null;await push(page,s);
+ await expect(page.locator('#action-spotlight')).toContainText('Alex is choosing');
+ await expect(page.getByRole('button',{name:'Choose Blair'})).toHaveCount(0);
+ s.revision++;s.game.pending=null;s.game.players[1].status='frozen';s.game.events.push({id:2,round:1,type:'actionResolved',actorId:'me',targetId:'b',card:{type:'freeze'}});await push(page,s);
+ await expect(page.locator('#activity')).toContainText('Alex used Freeze on Blair');
+});
+
+test('bust duplicate remains visible with a clear explanation for every viewer',async({page})=>{
+ const s=initial();s.you.id=null;s.game.players[1].status='busted';s.game.players[1].roundScore=0;s.game.players[1].bustCard={type:'number',value:9};
+ s.game.events=[{id:1,round:1,type:'bust',actorId:'b',card:{type:'number',value:9}}];await setup(page,s);
+ const player=page.locator('[data-player-id="b"]');
+ await expect(player.locator('.bust-card')).toHaveAccessibleName('9 duplicate number card · Bust');
+ await expect(player.locator('.cards .card')).toHaveCount(2);
+ await expect(player).toContainText('Duplicate 9 · 0 points this round');
+ await expect(page.locator('#activity')).toContainText('Blair busted on a duplicate 9');
+});
+
+for(const width of [320,390,1280])test(`compact dark table and action selection remain usable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:844});const s=initial();s.game.pending={type:'secondChance',actorId:'me',targets:['b','c']};s.game.players[0].secondChance=true;s.game.players[0].numbers=[0,1,2,3,4,5];s.game.players[2].status='active';await setup(page,s);
+ await expect(page.locator('#action-spotlight')).toBeVisible();
+ const theme=await page.locator('body').evaluate(e=>getComputedStyle(e).backgroundColor);expect(theme).not.toBe('rgb(246, 243, 233)');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ for(const b of await page.locator('#actions button').all()){const box=await b.boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);}
+ await expect(page.locator('#action-spotlight')).toContainText('Second Chance');
+ if(process.env.FLIP7_SCREENSHOT_DIR)await page.screenshot({path:`${process.env.FLIP7_SCREENSHOT_DIR}/flip7-${width}.png`,fullPage:true});
+});
+
+test('shared narration is bounded, escapes names, and does not duplicate after reconnect',async({page})=>{
+ const s=initial();s.players[1].name='<script>bad()</script>';s.game.events=[{id:1,round:1,type:'secondChanceUsed',actorId:'b',card:{type:'number',value:9}}];await setup(page,s);await push(page,s);
+ await expect(page.locator('#activity li')).toHaveCount(1);await expect(page.locator('#activity script')).toHaveCount(0);await expect(page.locator('#activity')).toContainText('used Second Chance to discard a duplicate 9');
+});
+
+test('latest shared play stays above a twelve-player mobile table',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const s=initial();
+ for(let i=3;i<12;i++){s.players.push({id:'p'+i,name:'Player '+i,connected:true});s.game.players.push({...s.game.players[1],id:'p'+i});}
+ s.game.events=[{id:1,round:1,type:'actionResolved',actorId:'b',targetId:'me',card:{type:'flipThree'}}];await setup(page,s);
+ const latest=await page.locator('#latest-event').boundingBox();const players=await page.locator('#players').boundingBox();expect(latest.y+latest.height).toBeLessThan(players.y);expect(latest.y+latest.height).toBeLessThan(844);
+});
+
+test('batched Flip Three and Bust keep the target and outcome above the table',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const s=initial();s.you.id=null;
+ s.game.events=[{id:1,round:1,type:'actionResolved',actorId:'me',targetId:'b',card:{type:'flipThree'}},{id:2,round:1,type:'bust',actorId:'b',card:{type:'number',value:9}}];await setup(page,s);
+ await expect(page.locator('#latest-play')).toContainText('Alex used Flip Three on Blair');
+ await expect(page.locator('#latest-play')).toContainText('Blair busted on a duplicate 9');
+ const box=await page.locator('#latest-play').boundingBox();expect(box.y+box.height).toBeLessThan(844);
+ s.game.round++;s.game.events=[];await push(page,s);await expect(page.locator('#latest-play')).toBeHidden();
+});
