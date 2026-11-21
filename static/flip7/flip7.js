@@ -8,6 +8,7 @@
   let profile=null, view=null, socket=null, room='', ready=false, pending=false, generation=0, retry=null, heartbeat=null, timeout=null, leaving=false;
   let connectTimeout=null, retryDelay=1500, terminalClose=false;
   let inspectionKey=null, inspectedId=null, localActionKey=null;
+  let seenDeal=null, dealTravel=null;
   const name = id => view?.players.find(p=>p.id===id)?.name || 'Player';
   const me = () => view?.you?.id;
   const host = () => !!me() && view?.hostId===me();
@@ -22,7 +23,7 @@
     pending=true;socket.send(JSON.stringify(frame));clearTimeout(timeout);
     timeout=setTimeout(()=>{notice('No response yet. Reconnecting to check the latest state.');connect();},8000);render();return true;
   }
-  function stop() {generation++;ready=false;pending=false;clearTimeout(retry);clearTimeout(timeout);clearTimeout(connectTimeout);clearInterval(heartbeat);if(socket){socket.onclose=null;socket.onmessage=null;socket.close();socket=null;}}
+  function stop() {generation++;ready=false;seenDeal=null;endDealTravel();pending=false;clearTimeout(retry);clearTimeout(timeout);clearTimeout(connectTimeout);clearInterval(heartbeat);if(socket){socket.onclose=null;socket.onmessage=null;socket.close();socket=null;}}
   function connect() {
     stop();if(!room || terminalClose || window.FC_MOVED)return;const g=generation;let last=Date.now();
     $('connection').textContent='Connecting…';$('recovery').hidden=true;
@@ -152,6 +153,57 @@
     return face;
   }
 
+  function endDealTravel() {
+    if (!dealTravel) return;
+    const { ghost, animation } = dealTravel;
+    dealTravel = null;
+    ghost.remove();
+    animation.cancel();
+  }
+
+  function renderDealTravel(table, seats, scope, draw) {
+    if (!ready) {
+      seenDeal = null;
+      endDealTravel();
+      return;
+    }
+    const previous = seenDeal;
+    const sameRound = previous?.scope === scope;
+    const id = draw?.id ?? 0;
+    seenDeal = { scope, id: sameRound ? Math.max(previous.id, id) : id };
+    if (!sameRound || !draw) {
+      endDealTravel();
+      return;
+    }
+    if (id <= previous.id) return;
+    endDealTravel();
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const target = [...seats.children].find(seat => seat.dataset.seatId === draw.actorId);
+    const deck = table.querySelector('.f7-deck-back');
+    if (!target || !deck?.animate) return;
+    const origin = table.getBoundingClientRect();
+    const source = deck.getBoundingClientRect();
+    const destination = target.getBoundingClientRect();
+    const dx = destination.left + (destination.width - source.width) / 2 - source.left;
+    const dy = destination.top + (destination.height - source.height) / 2 - source.top;
+    const ghost = make('div','f7-deck-back f7-deal-ghost','7');
+    ghost.setAttribute('aria-hidden','true');
+    ghost.style.left = `${source.left - origin.left}px`;
+    ghost.style.top = `${source.top - origin.top}px`;
+    table.append(ghost);
+    const animation = ghost.animate([
+      { transform:'translate(0px, 0px) scale(1)', opacity:1 },
+      { transform:`translate(${dx * .55}px, ${dy * .55 - 9}px) scale(.82)`, opacity:1, offset:.58 },
+      { transform:`translate(${dx}px, ${dy}px) scale(.55)`, opacity:0 },
+    ], { duration:360, easing:'cubic-bezier(.19,.55,.31,1)' });
+    dealTravel = {ghost, animation};
+    const remove = () => {
+      ghost.remove();
+      if (dealTravel?.ghost === ghost) dealTravel = null;
+    };
+    animation.finished.then(remove,remove);
+  }
+
   function renderOval(game) {
     const table = $('oval-table');
     const seats = $('oval-seats');
@@ -167,7 +219,8 @@
     $('players').classList.toggle('f7-in-play', !!game);
     $('players').classList.toggle('f7-crowded', (game?.players.length || 0) > 6);
     if (!game) {
-      inspectionKey = inspectedId = localActionKey = null;
+      inspectionKey = inspectedId = localActionKey = seenDeal = null;
+      endDealTravel();
       seats.replaceChildren();
       slot.replaceChildren();
       delete slot.dataset.drawKey;
@@ -242,6 +295,7 @@
     }));
     updateInspection(defaultId);
     if (focusedSeat) [...seats.children].find(seat => seat.dataset.seatId === focusedSeat)?.focus({preventScroll:true});
+    renderDealTravel(table,seats,`${key}:${game.round}`,draw);
   }
 
   function render() {

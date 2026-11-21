@@ -353,3 +353,12 @@ dialog h3 { margin-top: 22px; color: var(--f7-gold); }
   .action-spotlight.f7-centre-has-action > .card { display: none; }
   .action-spotlight.f7-centre-has-action { padding-block: 10px; }
 }
+
+
+/* A transient card back travels while the authoritative face stays still. */
+.f7-deal-ghost {
+  position: absolute; z-index: 3; pointer-events: none; user-select: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .f7-deal-ghost { display: none; }
+}

@@ -243,3 +243,79 @@ test('your turn and target choice bring back your hand once without moving focus
  await opposing.click();s.revision++;await push(page,s);
  await expect(opposing).toHaveAttribute('aria-pressed','true');
 });
+
+const drawMotionProbe = page => page.addInitScript(() => {
+ const animate=Element.prototype.animate;
+ window.dealMotions=[];
+ Element.prototype.animate=function(frames, options){
+  if(this.classList.contains('f7-deal-ghost'))window.dealMotions.push(frames);
+  return animate.call(this,frames,options);
+ };
+});
+const motionCount = page => page.evaluate(()=>dealMotions.length);
+
+test('a new live reveal sends one non-interactive card toward its seat, while face and controls update immediately',async({page})=>{
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await drawMotionProbe(page);
+ const s=initial();s.game.lastDraw={id:3,actorId:'c',card:{type:'number',value:4}};
+ await setup(page,s);await expect(page.locator('#revealed-card')).toHaveAccessibleName('4 number card');
+ expect(await motionCount(page)).toBe(0);
+ s.revision++;s.game.lastDraw={id:4,actorId:'b',card:{type:'number',value:11}};s.game.players[1].numbers.push(11);
+ const frame=await page.evaluate(state=>{
+  sock.push(state);
+  const ghost=document.querySelector('.f7-deal-ghost');
+  return { label:document.getElementById('revealed-card').getAttribute('aria-label'),
+   ghostHidden:ghost?.getAttribute('aria-hidden'), pointer:ghost ? getComputedStyle(ghost).pointerEvents : undefined,
+   deckX:document.querySelector('.f7-deck-back').getBoundingClientRect().x,
+   ghostX:ghost?.getBoundingClientRect().x, seatX:document.querySelector('[data-seat-id="b"]').getBoundingClientRect().x,
+   targetX:dealMotions.length ? new DOMMatrix(dealMotions.at(-1).at(-1).transform).m41 : 0, hitReady:!document.querySelector('#actions button').disabled };
+ },s);
+ expect(frame).toMatchObject({label:'11 number card',ghostHidden:'true',pointer:'none',hitReady:true});
+ expect(Math.abs(frame.deckX-frame.ghostX)).toBeLessThan(4);
+ const dx=frame.targetX;
+ expect(Math.sign(dx)).toBe(Math.sign(frame.seatX-frame.deckX));
+ expect(Math.abs(dx)).toBeGreaterThan(20);
+ await push(page,s);
+ s.revision++;s.players[2].connected=false;await push(page,s);
+ expect(await motionCount(page)).toBe(1);
+ await expect(page.locator('.f7-deal-ghost')).toHaveCount(0);
+ await expect(page.locator('#revealed-card')).toHaveAccessibleName('11 number card');
+});
+
+test('reduced motion keeps authoritative reveal instant with no travelling card',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await drawMotionProbe(page);
+ const s=initial();s.game.lastDraw={id:2,actorId:'c',card:{type:'number',value:4}};await setup(page,s);
+ await expect(page.locator('#revealed-card')).toHaveAccessibleName('4 number card');
+ s.revision++;s.game.lastDraw={id:3,actorId:'b',card:{type:'number',value:9}};await push(page,s);
+ await expect(page.locator('#revealed-card')).toHaveAccessibleName('9 number card');
+ expect(await motionCount(page)).toBe(0);
+ await expect(page.locator('.f7-deal-ghost')).toHaveCount(0);
+});
+
+test('new draws replace travelling cards and reconnect and new rounds do not replay motion',async({page})=>{
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await drawMotionProbe(page);
+ const s=initial();s.game.lastDraw={id:3,actorId:'c',card:{type:'number',value:4}};await setup(page,s);
+ await expect(page.locator('#revealed-card')).toHaveAccessibleName('4 number card');
+ const state2=structuredClone(s);state2.revision++;state2.game.lastDraw={id:4,actorId:'b',card:{type:'number',value:9}};
+ const state3=structuredClone(state2);state3.revision++;state3.game.lastDraw={id:5,actorId:'me',card:{type:'number',value:5}};
+ const after=await page.evaluate(([second,third])=>{
+  sock.push(second);const firstGhost=document.querySelector('.f7-deal-ghost');
+  sock.push(third);
+  const replacement=!!firstGhost&&!firstGhost.isConnected&&document.querySelectorAll('.f7-deal-ghost').length===1;
+  sock.close(4409);
+  return {replacement, removed:!document.querySelector('.f7-deal-ghost')};
+ },[state2,state3]);
+ expect(after).toEqual({replacement:true,removed:true});
+ await page.getByRole('button',{name:'Reconnect this tab'}).click();
+ await expect.poll(()=>page.evaluate(()=>window.socketAttempts)).toBe(2);
+ const state4=structuredClone(state3);state4.revision++;state4.game.lastDraw={id:6,actorId:'c',card:{type:'number',value:3}};
+ await push(page,state4);
+ await expect(page.locator('#revealed-card')).toHaveAccessibleName('3 number card');
+ expect(await motionCount(page)).toBe(2);
+ state4.revision++;state4.game.round++;state4.game.lastDraw={id:7,actorId:'me',card:{type:'number',value:7}};
+ await push(page,state4);
+ await expect(page.locator('#revealed-card')).toHaveAccessibleName('7 number card');
+ expect(await motionCount(page)).toBe(2);
+});
