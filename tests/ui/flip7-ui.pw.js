@@ -156,9 +156,27 @@ test('latest shared play stays above a twelve-player mobile table',async({page})
 
 test('batched Flip Three and Bust keep the target and outcome above the table',async({page})=>{
  await page.setViewportSize({width:390,height:844});const s=initial();s.you.id=null;
- s.game.events=[{id:1,round:1,type:'actionResolved',actorId:'me',targetId:'b',card:{type:'flipThree'}},{id:2,round:1,type:'bust',actorId:'b',card:{type:'number',value:9}}];await setup(page,s);
+ s.game.events=[{id:1,batchId:1,round:1,type:'actionResolved',actorId:'me',targetId:'b',card:{type:'flipThree'}},{id:2,batchId:1,sourceActionId:1,round:1,type:'bust',actorId:'b',card:{type:'number',value:9}}];await setup(page,s);
  await expect(page.locator('#latest-play')).toContainText('Alex used Flip Three on Blair');
  await expect(page.locator('#latest-play')).toContainText('Blair busted on a duplicate 9');
  const box=await page.locator('#latest-play').boundingBox();expect(box.y+box.height).toBeLessThan(844);
  s.game.round++;s.game.events=[];await push(page,s);await expect(page.locator('#latest-play')).toBeHidden();
+});
+
+
+for(const [label,type,targetId,actionBatchId,bustBatchId] of [
+ ['old Freeze','freeze','c',1,2],
+ ['earlier Flip Three on the same player','flipThree','b',1,2],
+ ['a non-causal action in the same server batch','freeze','c',1,1],
+ ['legacy events without batch ids','flipThree','b',undefined,undefined],
+])test(`Latest Play does not connect an independent bust to ${label}`,async({page})=>{
+ const s=initial();s.you.id=null;
+ s.game.events=[{id:1,batchId:actionBatchId,round:1,type:'actionResolved',actorId:'me',targetId,card:{type}}];await setup(page,s);
+ await expect(page.locator('#latest-play')).toContainText('Alex used');
+ s.revision++;s.game.events.push({id:2,batchId:bustBatchId,round:1,type:'bust',actorId:'b',card:{type:'number',value:9}});await push(page,s);
+ const latest=page.locator('#latest-play');
+ await expect(latest).toContainText('Blair busted on a duplicate 9');
+ await expect(latest).not.toContainText('Alex used');
+ await page.locator('#activity summary').click();
+ await expect(page.locator('#activity li').filter({hasText:'Alex used'})).toBeVisible();
 });

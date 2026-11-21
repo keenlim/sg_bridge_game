@@ -84,8 +84,14 @@
     $('activity').hidden = events.length === 0;
     $('latest-play').hidden = events.length === 0;
     const lastEvent = events[events.length - 1];
-    const resolved = events.slice().reverse().find(event => event.type === 'actionResolved');
-    const latest = lastEvent ? [resolved && resolved.id !== lastEvent.id ? describeEvent(resolved) : '', describeEvent(lastEvent)].filter(Boolean).join(' ') : '';
+    // Older events have no batch; never infer a connection from their order.
+    const resolved = lastEvent?.batchId != null && lastEvent.type !== 'actionResolved'
+      ? events.slice().reverse().find(event => event.type === 'actionResolved'
+        && event.batchId === lastEvent.batchId
+        // Resuming dealing can emit an unrelated bust in the same move.
+        && (lastEvent.type !== 'bust' || event.id === lastEvent.sourceActionId))
+      : undefined;
+    const latest = lastEvent ? [resolved ? describeEvent(resolved) : '', describeEvent(lastEvent)].filter(Boolean).join(' ') : '';
     // Presence updates must not re-announce an unchanged play.
     const latestKey = events.length ? `${game.id}:${events[events.length - 1].id}` : '';
     if ($('latest-event').dataset.eventKey !== latestKey) {

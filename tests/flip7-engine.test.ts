@@ -163,9 +163,27 @@ describe('Flip 7 public action and bust presentation', () => {
       { type: 'actionDrawn', actorId: 'b', card: a('freeze') },
       { type: 'bust', actorId: 'b', card: n(2) },
     ]);
+    const [drawn, resolved, forcedAction, bust] = gameView(g).events;
+    expect(resolved.batchId).toBeDefined();
+    expect(drawn.batchId).not.toBe(resolved.batchId);
+    expect(forcedAction.batchId).toBe(resolved.batchId);
+    expect(bust.batchId).toBe(resolved.batchId);
+    expect(bust.sourceActionId).toBe(resolved.id);
     expect(gameView(g).players[1].bustCard).toEqual(n(2));
     expect(gameView(g).pending).toBeNull();
     expect(JSON.stringify(gameView(g))).not.toContain('"value":12');
+  });
+
+  it('assigns a later ordinary Hit a distinct batch even for the same Flip Three recipient', () => {
+    let g = make(n(1), n(2), n(3), a('flipThree'), n(4), n(5), n(6), n(2));
+    g = play(g, 'a', 'hit'); g = play(g, 'a', 'target', 'b');
+    g = play(JSON.parse(JSON.stringify(g)), 'b', 'hit');
+    const [, resolved, bust] = gameView(g).events;
+    expect(resolved).toMatchObject({ type: 'actionResolved', targetId: 'b' });
+    expect(bust).toMatchObject({ type: 'bust', actorId: 'b', id: resolved.id + 1 });
+    expect(bust.batchId).toBeDefined();
+    expect(bust.batchId).not.toBe(resolved.batchId);
+    expect(bust.sourceActionId).toBeUndefined();
   });
 
   it('reads old persisted games without fields, infers old bust evidence, and persists new events', () => {
