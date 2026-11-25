@@ -145,6 +145,8 @@ export interface Env {
   OMOK_ROOM: DurableObjectNamespace;
   SIXNIMMT_ROOM: DurableObjectNamespace;
   WORDAGENTS_ROOM: DurableObjectNamespace;
+  WORDAGENTS_AEO_DECK?: string;
+  WORDAGENTS_TEAM_IDS?: string;
   FLIP7_ROOM: DurableObjectNamespace;
   DB: D1Database;
   JWT_SECRET: string;

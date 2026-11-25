@@ -96,6 +96,7 @@
     <div class="lobby-container wa-lobby">
       <p class="wa-eyebrow">Mission room</p>
       <h2>Mission lobby</h2>
+      <p id="lobby-pack-badge" class="wa-pack-badge hidden">AEO word pack</p>
       <button id="lobby-code-btn" type="button" class="room-code-display" aria-label="Copy invite link">
         <span class="label">Room code</span>
         <span id="lobby-code" class="code">----</span>
@@ -111,6 +112,13 @@
       <ul id="lobby-checklist" class="wa-checklist" aria-label="Ready to start"></ul>
       <p id="lobby-wait" class="status-text"></p>
       <div id="lobby-login" class="wa-lobby-login"></div>
+      <div id="lobby-pack-picker" class="wa-pack-picker hidden">
+        <label for="lobby-pack">Word pack</label>
+        <select id="lobby-pack" disabled>
+          <option value="classic">Classic</option>
+          <option value="aeo">AEO</option>
+        </select>
+      </div>
       <div class="wa-lobby-actions">
         <button id="btn-take-seat" type="button" class="btn btn-primary hidden">Join this room</button>
         <button id="btn-start" type="button" class="btn btn-primary hidden">Start mission</button>
@@ -128,6 +136,7 @@
           <div class="wa-turn-wrap">
             <h3 id="wa-turn" class="wa-turn" role="status" aria-live="polite" aria-atomic="true"></h3>
             <p id="wa-you" class="wa-you"></p>
+            <p id="game-pack-badge" class="wa-pack-badge hidden">AEO word pack</p>
           </div>
           <div id="score-blue" class="wa-score blue"><span class="wa-score-glyph" aria-hidden="true">●</span><span class="wa-score-label">Blue</span><b id="blue-left">8</b><small>to find</small></div>
         </div>
@@ -201,6 +210,7 @@
   <div id="modal-over" class="overlay wa-modal hidden" role="dialog" aria-modal="true" aria-labelledby="over-title">
     <div class="gameover-container wa-modal-box">
       <h2 id="over-title"></h2>
+      <p id="over-pack-badge" class="wa-pack-badge hidden">AEO word pack</p>
       <p id="over-sub" class="subtitle"></p>
       <div id="over-results" class="wa-results"></div>
       <div class="gameover-actions">

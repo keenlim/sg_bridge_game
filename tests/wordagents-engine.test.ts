@@ -53,3 +53,35 @@ describe('Word Agents rules and secrecy',()=>{
   g.cards[1].revealed=true;expect(validateClue(g,'pear')).toBe('PEAR');
  });
 });
+
+it('draws an approved 15/6/4 word mix and treats compound or cased board labels as one card', () => {
+ const themed = Array.from({length: 15}, (_, i) => 'Theme ' + String.fromCharCode(65+i));
+ const technology = Array.from({length: 7}, (_, i) => 'Tool ' + String.fromCharCode(65+i));
+ const wildcards = Array.from({length: 5}, (_, i) => 'Wild ' + String.fromCharCode(65+i));
+ const g = newGame({ themed, technology, wildcards });
+ const drawn = g.cards.map(c => c.word);
+ expect(new Set(drawn).size).toBe(25);
+ expect(drawn.filter(w => themed.includes(w))).toHaveLength(15);
+ expect(drawn.filter(w => technology.includes(w))).toHaveLength(6);
+ expect(drawn.filter(w => wildcards.includes(w))).toHaveLength(4);
+ expect(() => validateClue(g, 'TheMeA')).toThrow(/unrevealed/);
+ expect(() => validateClue({cards:[{word:'Ice-Cream',color:'red',revealed:false}]}, 'creamery')).toThrow(/unrevealed/);
+});
+
+it('fails closed on missing team settings, invalid labels and duplicate cards', async () => {
+ const { readTeamConfig, readDeck } = await import('../src/wordagents/packs');
+ const deck = {
+  themed: Array.from({length: 15}, (_, i) => 'Theme ' + String.fromCharCode(65+i)),
+  technology: ['Puzzle Box', 'Tech B', 'Tech C', 'Tech D', 'Tech E', 'Tech F'],
+  wildcards: ['Wild A', 'Wild B', 'Wild C', 'Wild D'],
+ };
+ const raw = JSON.stringify(deck);
+ expect(readDeck(raw)).toEqual(deck);
+ expect(readTeamConfig({})).toMatchObject({restricted:false, deck:null});
+ expect(readTeamConfig({WORDAGENTS_AEO_DECK:raw})).toMatchObject({restricted:true, members:new Set(), deck:null});
+ expect(readTeamConfig({WORDAGENTS_AEO_DECK:raw, WORDAGENTS_TEAM_IDS:'1, tg_2'})).toMatchObject({restricted:true, members:new Set(), deck:null});
+ expect(readTeamConfig({WORDAGENTS_AEO_DECK:raw, WORDAGENTS_TEAM_IDS:'1, 2'})).toMatchObject({restricted:true, members:new Set(['tg_1','tg_2']), deck});
+ expect(readDeck(JSON.stringify({...deck, wildcards:['PUZZLE-BOX', ...deck.wildcards]}))).toBeNull();
+ expect(readDeck(JSON.stringify({...deck, wildcards:['<script>', ...deck.wildcards]}))).toBeNull();
+ expect(readDeck(JSON.stringify({...deck, wildcards:[]}))).toBeNull();
+});

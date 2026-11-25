@@ -13,6 +13,7 @@ import { getRegicideLeaderboard, getRegicideStats, getRegicideGroupLeaderboard }
 import { getTaiDiLeaderboard, getTaiDiStats, getTaiDiGroupLeaderboard } from './taidi/db';
 import { getConnect4Leaderboard, getConnect4Stats, getConnect4GroupLeaderboard } from './connect4/db';
 import { getOmokLeaderboard, getOmokStats, getOmokGroupLeaderboard } from './omok/db';
+import { readTeamConfig } from './wordagents/packs';
 
 export { GameRoom } from './game-room';
 export { RegicideRoom } from './regicide/room';
@@ -557,7 +558,12 @@ export default {
 
     // --- Word Agents (unranked teams) ---
     if (url.pathname === '/api/wordagents/create' && request.method === 'POST') {
-      if (!await getAuthClaims(request, env.JWT_SECRET)) return Response.json({ error: 'Sign in to create a room' }, {status: 401});
+      const claims = await getAuthClaims(request, env.JWT_SECRET);
+      if (!claims) return Response.json({ error: 'Sign in to create a room' }, { status: 401 });
+      const { restricted, members } = readTeamConfig(env);
+      if (restricted && !members.has(`tg_${claims.sub}`)) {
+        return Response.json({ error: 'Word Agents is team-only. Sign in with an approved team account.' }, { status: 403 });
+      }
       const roomCode = await createWordAgentsRoom(env, {});
       return roomCode ? Response.json({ roomCode }) : Response.json({ error: 'Could not allocate a room' }, { status: 503 });
     }

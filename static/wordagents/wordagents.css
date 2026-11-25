@@ -409,3 +409,10 @@ body.modal-open { overflow: hidden; }
 .wa-card > * { pointer-events: none; }
 .wa-abandon { width: 100%; margin-top: 14px; min-height: 40px; font-size: 0.8rem; }
 .wa-body #overlay-reconnect { z-index: 1400; }
+
+
+/* Pack UI stays out of the way for classic rooms. */
+.wa-pack-picker { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 10px 0; font-weight: 700; color: var(--text-dim); }
+.wa-pack-picker select { padding: 6px 12px; min-height: 38px; border: 1px solid var(--wa-gold); border-radius: 8px; background: #191822; color: var(--wa-gold); font: inherit; }
+.wa-pack-badge { display: inline-block; width: fit-content; margin: 4px auto; padding: 3px 8px; border: 1px solid rgba(243, 194, 102, 0.45); border-radius: 99px; color: var(--wa-gold); font: 700 0.68rem var(--font); }
+.wa-board-aeo .wa-word { text-transform: none; overflow-wrap: anywhere; }

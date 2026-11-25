@@ -239,6 +239,7 @@ function showFatal(code) {
   for (const modal of document.querySelectorAll('.wa-modal:not(.hidden)')) hideModal(modal.id);
   const message = code === 4409 ? 'This room is open in another tab or device.'
     : code === 4404 ? 'This room no longer exists. Create a new room or check your invite.'
+    : code === 4403 ? 'This room is team-only. Go back and sign in with an approved team account.'
     : 'Your sign-in needs refreshing. Go back and sign in again.';
   $('reconnect-message').textContent = message;
   $('btn-reconnect').classList.toggle('hidden', code !== 4409);
@@ -375,6 +376,10 @@ function renderTopBar() {
 // ---------- Lobby ----------
 function renderLobbyLoading() {
   $('lobby-code').textContent = room;
+  $('lobby-pack-badge').classList.add('hidden');
+  $('lobby-pack-picker').classList.add('hidden');
+  $('lobby-pack').disabled = true;
+  $('lobby-pack').removeAttribute('data-selection-key');
   $('lobby-roster').replaceChildren(el('div', 'wa-open-slot', 'Connecting to the room…'));
   $('lobby-checklist').replaceChildren();
   $('lobby-wait').textContent = '';
@@ -438,6 +443,17 @@ function renderLobby() {
   const { items, valid, enough } = lobbyReadiness();
   $('lobby-checklist').replaceChildren(...items.map((item) => el('li', item.ok ? 'ok' : '', item.text)));
   const host = isHost();
+  const activePack = view.pack === 'aeo' ? 'aeo' : 'classic';
+  const canChoosePack = host && view.availablePacks?.includes('aeo');
+  const packSelect = $('lobby-pack');
+  $('lobby-pack-badge').classList.toggle('hidden', activePack !== 'aeo');
+  $('lobby-pack-picker').classList.toggle('hidden', !canChoosePack);
+  packSelect.disabled = !canChoosePack || !connected() || pending;
+  const selectionKey = canChoosePack ? `${view.roomCode}:${activePack}` : '';
+  if (packSelect.dataset.selectionKey !== selectionKey) {
+    packSelect.value = canChoosePack ? activePack : 'classic';
+    packSelect.dataset.selectionKey = selectionKey;
+  }
   $('btn-start').classList.toggle('hidden', !host);
   $('btn-start').disabled = !valid || !connected() || pending;
   $('btn-take-seat').classList.toggle('hidden', !profile || seated || !!you.removed);
@@ -455,6 +471,11 @@ function renderLobby() {
 // ---------- Game ----------
 function renderGame() {
   const g = view.game;
+  const isAeo = view.pack === 'aeo';
+  $('board').classList.toggle('wa-board-aeo', isAeo);
+  $('game-pack-badge').classList.toggle('hidden', !isAeo);
+  // Entering a round ends any local draft pack selection; the next lobby uses the saved pack.
+  $('lobby-pack').removeAttribute('data-selection-key');
   const you = view.you || {};
   const finished = g.phase === 'finished';
   const myTurn = !!you.team && you.team === g.turn && !finished;
@@ -613,10 +634,17 @@ function renderDock(g, myTurn) {
 
 /** Mirrors the server's clue check for inline feedback; the room still validates. */
 function clueProblem(raw) {
-  const value = raw.trim().toUpperCase();
-  if (!value) return { value, problem: '' };
-  if (!/^[A-Z]{1,30}$/.test(value)) return { value, problem: 'One word, letters only.' };
-  const clash = view?.game?.cards.find((c) => !c.revealed && (c.word.includes(value) || value.includes(c.word)));
+  const trimmed = raw.trim();
+  const value = trimmed.toUpperCase();
+  if (!trimmed) return { value, problem: '' };
+  if (!/^[A-Za-z]{1,30}$/.test(trimmed)) return { value, problem: 'One word, letters only.' };
+  const clash = view?.game?.cards.find((card) => {
+    if (card.revealed) return false;
+    const word = card.word.toUpperCase();
+    const whole = word.replace(/[^A-Z]/g, '');
+    if (whole && (whole.includes(value) || value.includes(whole))) return true;
+    return (word.match(/[A-Z]+/g) || []).some((part) => part.length >= 3 && (part.includes(value) || value.includes(part)));
+  });
   if (clash) return { value, problem: `Too close to ${clash.word}, which is still on the board.` };
   return { value, problem: '' };
 }
@@ -693,6 +721,7 @@ function syncOverModal() {
 }
 
 function showOverModal(g) {
+  $('over-pack-badge').classList.toggle('hidden', view.pack !== 'aeo');
   const mine = view.you?.team;
   const loser = otherTeam(g.winner);
   const lastGuess = [...(g.history || [])].reverse().find((e) => e.t === 'guess');
@@ -889,7 +918,11 @@ $('btn-share').addEventListener('click', shareInvite);
 $('btn-leave').addEventListener('click', leave);
 $('btn-sound').addEventListener('click', () => { sfx.toggle(); renderTopBar(); });
 $('btn-take-seat').addEventListener('click', () => { if (connected()) send('join'); });
-$('btn-start').addEventListener('click', () => send('start'));
+$('btn-start').addEventListener('click', () => {
+  if (!isHost() || view.game) return;
+  const pack = view.availablePacks?.includes('aeo') && $('lobby-pack').value === 'aeo' ? 'aeo' : 'classic';
+  send('start', { pack });
+});
 $('btn-again').addEventListener('click', () => { if (send('start')) hideModal('modal-over'); });
 $('btn-to-lobby').addEventListener('click', () => send('lobby'));
 $('btn-abandon').addEventListener('click', async () => {
