@@ -62,6 +62,16 @@ const noSideScroll = (page) => page.evaluate(() => document.documentElement.scro
 
 /** Taps a fanned card on its exposed corner, like a finger would. */
 async function tapCard(page, code) {
+  // Escape and card plays can move neighbouring cards under the sampled corner.
+  // Let layout transitions settle without waiting for the looping card glow.
+  await page.mouse.move(0, 0);
+  await page.locator('#hand').evaluate(async (hand) => {
+    // Flush the style update so pending transitions appear in getAnimations().
+    hand.getBoundingClientRect();
+    await Promise.allSettled(hand.getAnimations({ subtree: true })
+      .filter((a) => a instanceof CSSTransition && ['left', 'top', 'transform'].includes(a.transitionProperty))
+      .map((a) => a.finished));
+  });
   const point = await page.evaluate((code) => {
     const card = document.querySelector(`#hand .hand-card[data-card="${code}"]`);
     const corner = card.querySelector('.card-corner').getBoundingClientRect();
