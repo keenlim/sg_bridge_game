@@ -40,3 +40,14 @@ npm run test:pr               # always, before merge
 ```
 
 `tests/ui/wordagents-capture.cjs` regenerates the [screenshot gallery](screenshots/QA.md) from real local rounds (port 4252); it is not a test. Chromium mobile emulation does not verify iOS Safari, Telegram WebView or physical touch devices.
+
+## Team-only word pack
+
+For an approved **separate** installation, set both server-side bindings:
+
+- `WORDAGENTS_TEAM_IDS`: comma-separated numeric Telegram user IDs for approved players. Use verified numeric IDs, not display names or usernames. At least four approved players are needed to start.
+- `WORDAGENTS_AEO_DECK`: compact JSON with arrays named `themed`, `technology`, and `wildcards`. Keep this as a Worker secret or in the ignored local secret file, not in the repository, static assets, logs or public preview. Both bindings are outside the browser bundle.
+
+Without either binding, public Classic rooms work as before. If either binding is supplied, Word Agents room access is team-only instead: signed-out and unlisted visitors cannot receive lobby or board state, even with the invite. This restriction applies to Classic rooms on the configured installation as well. Missing or invalid member IDs allow nobody in; missing or invalid deck data never enables AEO. Persisted private rooms do not reopen if bindings are removed. Never enable this on the original public Worker or reuse its database, room namespace, bot or JWT secret.
+
+In the lobby, the host selects **Word pack → AEO** before starting. The server deals 15 AEO-themed, six general technology and four wildcard labels, shuffled across the same 25-card board. Multi-word labels stay together. Rematches keep the pack. Return to the lobby to switch packs. Approved accounts can still spectate; the usual spymaster key and role rules still apply.

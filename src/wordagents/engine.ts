@@ -1,3 +1,5 @@
+import { AEO_MIX, type AeoDeck } from './packs';
+
 /** Original word list and implementation. No publisher assets or word deck. */
 export const WORDS = `ACORN ALARM ANCHOR APRON ARROW ATLAS AURORA BADGE BALCONY BAMBOO BASKET BEACON BEETLE BELL BERRY BICYCLE BLANKET BOAT BOULDER BREEZE BRIDGE BRUSH BUBBLE BUTTON CABIN CACTUS CAMERA CANDLE CANYON CARPET CASTLE CAVE CELLO CHALK CHERRY CHESS CHIMNEY CIRCLE CLIFF CLOUD COAST COMET COMPASS CORAL CROWN CRYSTAL DAISY DANCER DESERT DIAMOND DRAGON DRUM EAGLE ECHO ENGINE ENVELOPE FEATHER FENCE FERN FESTIVAL FIELD FIREFLY FLAG FLAME FLUTE FOREST FOSSIL FOUNTAIN FOX FROG GALAXY GARDEN GATE GEYSER GLACIER GLOBE GLOVE GOLD GONG GRAPE GRASS GUITAR HAMMER HARBOR HARP HAT HAWK HELMET HILL HONEY HORIZON HORSE ICE IGLOO INK ISLAND IVORY JACKET JAGUAR JAR JELLY JET JEWEL JUNGLE KETTLE KEY KITE KIWI LADDER LAKE LAMP LANTERN LEAF LEMON LIBRARY LIGHTHOUSE LILY LION LIZARD LOCK LOTUS MAGNET MAP MARBLE MASK MEADOW MELON MIRROR MOON MOSAIC MOUNTAIN MUSHROOM NEEDLE NEST NET NIGHT NINJA NOTEBOOK OASIS OCEAN OLIVE ORANGE ORBIT ORCHID OTTER OWL PALACE PANDA PAPER PARROT PEAR PEARL PEBBLE PENGUIN PIANO PILLOW PINE PIRATE PLANET PLUME POCKET POND PUMPKIN PUZZLE QUARTZ QUEEN QUILL RABBIT RADAR RAINBOW RAVEN REEF RIBBON RING RIVER ROBOT ROCKET ROSE SADDLE SAIL SAND SATELLITE SCARF SCHOOL SEED SHADOW SHELL SHIELD SHIP SHOE SHORE SHOVEL SILK SKATE SNOW SOAP SPARROW SPIDER SPOON SPRING SQUARE STAR STONE STORM STRAWBERRY STREAM SUBMARINE SUN SWORD TABLE TENT THISTLE THUNDER TIGER TORCH TOWER TRAIN TREE TRIANGLE TRUMPET TUNNEL TURTLE UMBRELLA VALLEY VASE VELVET VIOLIN VOLCANO WAGON WALNUT WATERFALL WAVE WEB WHALE WHEEL WHISTLE WILLOW WIND WINDOW WING WOLF WOOD YACHT YARN ZEBRA ZIPPER`.split(' ');
 
@@ -56,7 +58,12 @@ function record(game: Game, event: GameEvent): void {
   if (game.history.length > MAX_HISTORY) game.history.splice(0, game.history.length - MAX_HISTORY);
 }
 
-export function newGame(): Game {
+export function newGame(deck?: AeoDeck): Game {
+  const words = deck ? shuffle([
+    ...shuffle(deck.themed).slice(0, AEO_MIX.themed),
+    ...shuffle(deck.technology).slice(0, AEO_MIX.technology),
+    ...shuffle(deck.wildcards).slice(0, AEO_MIX.wildcards),
+  ]) : shuffle(WORDS).slice(0, BOARD_SIZE);
   const turn: Team = randomBelow(2) ? 'red' : 'blue';
   const colors = shuffle<Color>([
     ...Array<Color>(9).fill(turn), ...Array<Color>(8).fill(other(turn)),
@@ -64,18 +71,25 @@ export function newGame(): Game {
   ]);
   return {
     id: crypto.randomUUID(), turn, phase: 'clue',
-    cards: shuffle(WORDS).slice(0, BOARD_SIZE).map((word, i) => ({ word, color: colors[i], revealed: false })),
+    cards: words.map((word, i) => ({ word, color: colors[i], revealed: false })),
     remaining: { red: turn === 'red' ? 9 : 8, blue: turn === 'blue' ? 9 : 8 },
     clue: null, guessesLeft: 0, guessesMade: 0, winner: null, endReason: null,
     history: [{ t: 'start', team: turn }], marks: [],
   };
 }
 
+function overlapsClue(label: string, clue: string): boolean {
+  const parts = label.toUpperCase().match(/[A-Z]+/g) ?? [];
+  const term = parts.join('');
+  const candidates = [term, ...parts.filter(part => part.length >= 3)];
+  return candidates.some(word => word && (word.includes(clue) || clue.includes(word)));
+}
+
 /** Shared clue check (the client mirrors it for inline feedback). Returns the normalised clue. */
 export function validateClue(game: Pick<Game, 'cards'>, word: unknown): string {
   if (typeof word !== 'string' || !/^[A-Za-z]{1,30}$/.test(word.trim())) throw new Error('Use one word, letters only (up to 30).');
   const clue = word.trim().toUpperCase();
-  if (game.cards.some(c => !c.revealed && (c.word.includes(clue) || clue.includes(c.word)))) {
+  if (game.cards.some(c => !c.revealed && overlapsClue(c.word, clue))) {
     throw new Error('Your clue cannot contain an unrevealed board word, or part of one.');
   }
   return clue;

@@ -276,3 +276,73 @@ for (const width of [320, 390]) test(`original deck labels keep readable natural
     }
   }
 });
+
+test('an eligible host selects a word pack, sees it through the round, and rematches without switching packs', async ({ page }) => {
+  const lobby = { ...initial(), game: null, availablePacks: ['classic', 'aeo'] };
+  await setup(page, lobby);
+  const pack = page.getByLabel('Word pack');
+  await expect(pack).toHaveValue('classic');
+  await pack.selectOption('aeo');
+  await push(page, { ...lobby, watchers: 1 });
+  await expect(pack).toHaveValue('aeo');
+  await page.locator('#btn-start').click();
+  expect((await frames(page)).filter((m) => m.type === 'start')).toEqual([{ type: 'start', pack: 'aeo' }]);
+
+  const round = { ...initial(), pack: 'aeo', revision: 2 };
+  await push(page, round);
+  await expect(page.locator('#screen-game').getByText('AEO word pack', { exact: true })).toBeVisible();
+  const finished = structuredClone(round);
+  finished.revision = 3;
+  Object.assign(finished.game, { phase: 'finished', winner: 'red', endReason: 'agents' });
+  await push(page, finished);
+  await expect(page.getByRole('dialog').getByText('AEO word pack', { exact: true })).toBeVisible();
+  await page.locator('#btn-again').click();
+  expect((await frames(page)).filter((m) => m.type === 'start')).toEqual([
+    { type: 'start', pack: 'aeo' }, { type: 'start', gameId: 'round1', revision: 3 },
+  ]);
+  await push(page, { ...lobby, pack: 'aeo', revision: 4 });
+  await expect(pack).toHaveValue('aeo');
+  await expect(page.locator('#screen-lobby').getByText('AEO word pack', { exact: true })).toBeVisible();
+});
+
+test('non-hosts see the active pack but no picker, while classic lobbies add neither', async ({ page }) => {
+  const lobby = { ...initial(), game: null, hostId: 'p2', pack: 'aeo', availablePacks: ['classic', 'aeo'] };
+  await setup(page, lobby);
+  await expect(page.getByLabel('Word pack')).toBeHidden();
+  await expect(page.locator('#screen-lobby').getByText('AEO word pack', { exact: true })).toBeVisible();
+  await push(page, { ...lobby, revision: 2, hostId: 'me', pack: undefined, availablePacks: undefined });
+  await expect(page.locator('#btn-start')).toBeVisible();
+  await expect(page.getByLabel('Word pack')).toBeHidden();
+  await expect(page.locator('#screen-lobby').getByText('AEO word pack', { exact: true })).toBeHidden();
+});
+
+test('private room denial explains team sign-in and does not offer a retry', async ({ page }) => {
+  await setup(page);
+  await expect(page.locator('.wa-card')).toHaveCount(25);
+  await page.evaluate(() => fakeSocket.close(4403));
+  await expect(page.locator('#reconnect-message')).toHaveText(/team-only.*sign in/i);
+  await expect(page.locator('#btn-reconnect')).toBeHidden();
+  await expect(page.locator('#btn-reconnect-home')).toBeVisible();
+});
+
+test('AEO labels preserve case, wrap at narrow widths, and block normalized board-word clues', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  const state = { ...initial(), pack: 'aeo' };
+  state.you.role = 'spymaster';
+  state.players[0].role = 'spymaster';
+  state.players[1].role = 'operative';
+  Object.assign(state.game, { phase: 'clue', clue: null });
+  state.game.cards[0].word = 'Mixed-Case Orbit';
+  state.game.cards[1].word = 'InterdisciplinaryObservatory';
+  state.game.cards[2].word = 'Ice-Cream';
+  await setup(page, state);
+  const label = page.locator('.wa-card .wa-word').first();
+  await expect(label).toHaveText('Mixed-Case Orbit');
+  expect(await label.evaluate((node) => getComputedStyle(node).textTransform)).toBe('none');
+  expect(await page.locator('.wa-card .wa-word').nth(1).evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.locator('#clue-input').fill('mixedcaseorbit');
+  await expect(page.locator('#clue-error')).toHaveText('Too close to Mixed-Case Orbit, which is still on the board.');
+  await expect(page.locator('#btn-clue')).toBeDisabled();
+  await page.locator('#clue-input').fill('creamery');
+  await expect(page.locator('#clue-error')).toHaveText('Too close to Ice-Cream, which is still on the board.');
+});

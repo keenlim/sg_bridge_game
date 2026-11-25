@@ -3,6 +3,8 @@ import type { Env } from '../types';
 import { normalizePlayerName } from '../player-name';
 import { newGame, giveClue, guess, endTurn, toggleMark, gameView, shuffle, type Game, type Team } from './engine';
 
+import { readTeamConfig, type Pack } from './packs';
+
 type Role = 'spymaster' | 'operative';
 interface Player { id: string; name: string; team: Team | null; role: Role | null; connected: boolean }
 interface State {
@@ -15,6 +17,8 @@ interface State {
   /** Players the host removed; they can still watch but cannot rejoin this room. */
   removed?: string[];
   game: Game | null;
+  privateRoom?: boolean;
+  pack?: Pack;
 }
 interface Session { id: string; name: string }
 
@@ -38,7 +42,13 @@ function randomizeTeams(players: Player[]): void {
   });
 }
 
-export class WordAgentsRoom extends DurableObject {
+export class WordAgentsRoom extends DurableObject<Env> {
+  private readonly teamConfig = readTeamConfig(this.env);
+
+  private requiresTeam(state: State | undefined) {
+    return this.teamConfig.restricted || state?.privateRoom === true || state?.pack === 'aeo';
+  }
+
   private sessions = new Map<WebSocket, Session>();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -58,9 +68,18 @@ export class WordAgentsRoom extends DurableObject {
         if (state) return new Response('Exists', { status: 409 });
         const { roomCode } = await request.json() as { roomCode: string };
         state = { roomCode, revision: 0, hostId: null, players: [], removed: [], game: null };
+        if (this.teamConfig.restricted) state.privateRoom = true;
         await this.ctx.storage.put('state', state);
         await this.ctx.storage.setAlarm(Date.now() + EMPTY_ROOM_TTL_MS);
         return Response.json({ ok: true });
+      }
+      const upgrading = request.headers.get('Upgrade')?.toLowerCase() === 'websocket';
+      const id = url.searchParams.get('playerId');
+      if (upgrading && this.requiresTeam(state) && (!id || !this.teamConfig.members.has(id))) {
+        const [client, server] = Object.values(new WebSocketPair());
+        server.accept();
+        server.close(4403, 'Team access required');
+        return new Response(null, { status: 101, webSocket: client });
       }
       if (!state) {
         if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('Room not found', { status: 404 });
@@ -69,8 +88,7 @@ export class WordAgentsRoom extends DurableObject {
         server.close(4404, 'Room not found');
         return new Response(null, { status: 101, webSocket: client });
       }
-      if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('Not found', { status: 404 });
-      const id = url.searchParams.get('playerId');
+      if (!upgrading) return new Response('Not found', { status: 404 });
       if (!id) return new Response('Identity required', { status: 401 });
       const [client, server] = Object.values(new WebSocketPair());
       for (const [ws, session] of this.sessions) {
@@ -83,6 +101,7 @@ export class WordAgentsRoom extends DurableObject {
       server.serializeAttachment(session);
       this.sessions.set(server, session);
       this.syncPresence(state);
+      if (this.teamConfig.restricted) state.privateRoom = true;
       await this.ctx.storage.deleteAlarm();
       await this.ctx.storage.put('state', state);
       this.broadcast(state);
@@ -104,6 +123,10 @@ export class WordAgentsRoom extends DurableObject {
       if (this.sessions.get(ws) !== session) return;
       const state = await this.ctx.storage.get<State>('state');
       if (!state) return;
+      if (this.requiresTeam(state) && !this.teamConfig.members.has(session.id)) {
+        ws.close(4403, 'Team access required');
+        return;
+      }
       this.syncPresence(state);
       if (msg.type === 'sync') { this.send(ws, state, session.id); return; }
       const player = state.players.find(p => p.id === session.id);
@@ -126,16 +149,26 @@ export class WordAgentsRoom extends DurableObject {
           case 'choose': case 'randomize':
             // An older tab may still send a lobby selection after deployment.
             throw new Error('Teams and roles are assigned when a round starts. Refresh for the new lobby.');
-          case 'start':
+          case 'start': {
             if (!host) throw new Error('Only the host can start.');
             if (active) throw new Error('Finish the round first.');
             if (state.players.length < 4) throw new Error('At least four players are needed to start.');
             if (state.players.some(p => !p.connected)) {
               throw new Error('Everyone in the room must be connected. Remove offline players or wait for them.');
             }
+            const requested = msg.pack;
+            if (requested !== undefined && requested !== 'classic' && requested !== 'aeo') {
+              throw new Error('Choose a known word pack.');
+            }
+            const pack = requested ?? state.pack ?? 'classic';
+            if (state.game && pack !== (state.pack ?? 'classic')) throw new Error('Return to the lobby to change packs.');
+            if (pack === 'aeo' && !this.teamConfig.deck) throw new Error('The team word pack is not available.');
+            const game = newGame(pack === 'aeo' ? this.teamConfig.deck! : undefined);
             randomizeTeams(state.players);
-            state.game = newGame();
+            state.pack = pack;
+            state.game = game;
             break;
+          }
           case 'clue': case 'guess': case 'endTurn': {
             const game = state.game;
             if (!game || msg.gameId !== game.id || msg.revision !== state.revision) throw new Error('The board changed. Please try again.');
@@ -210,12 +243,17 @@ export class WordAgentsRoom extends DurableObject {
   }
 
   private send(ws: WebSocket, state: State, id: string, watchers = this.watchers(state)) {
+    if (this.requiresTeam(state) && !this.teamConfig.members.has(id)) {
+      try { ws.close(4403, 'Team access required'); } catch { /* socket closing */ }
+      return;
+    }
     const players = state.game ? state.players : state.players.map(p => ({ ...p, team: null, role: null }));
     const player = players.find(p => p.id === id);
     try {
       ws.send(JSON.stringify({
         type: 'state', roomCode: state.roomCode, revision: state.revision, hostId: effectiveHost(state),
         players, watchers, maxPlayers: MAX_PLAYERS,
+        ...(this.teamConfig.deck ? { availablePacks: ['classic', 'aeo'], pack: state.pack ?? 'classic' } : {}),
         you: { id, team: player?.team ?? null, role: player?.role ?? null, removed: !player && !!state.removed?.includes(id) },
         game: state.game ? gameView(state.game, player?.role === 'spymaster') : null,
       }));

@@ -33,6 +33,8 @@ it('enforces membership, roles, secret views, version guards and reconnect autho
   }
  }
  const guest=await connect('guest_x');guest.send({type:'join'});await expect.poll(()=>guest.frames.some(f=>f.message?.includes('Sign in'))).toBe(true);
+ clients[0].send({type:'start',pack:'aeo'});await expect.poll(()=>clients[0].frames.some(f=>f.message?.includes('pack is not available'))).toBe(true);
+ expect(clients[0].state().game).toBeNull();
  clients[0].send({type:'start'});await expect.poll(()=>clients[0].state()?.game?.phase).toBe('clue');
  await expect.poll(()=>clients.every(c=>c.state()?.game?.cards.length===25)).toBe(true);
  await expect.poll(()=>guest.state()?.game?.cards.length).toBe(25);
@@ -116,4 +118,50 @@ it('includes every seated player and requires them online for the next mission',
  await expect.poll(()=>c[0].state().players.length).toBe(4);
  c[0].send({type:'start'});await expect.poll(()=>c[0].state().game?.phase).toBe('clue');
  for(const x of [c[0],c[1],c[2],c[4]])x.ws.close();
+},30000);
+
+it('only permits allowlisted sockets and keeps the selected pack on rematch', async () => {
+ const {outputFiles}=await build({stdin:{contents:`export {WordAgentsRoom} from './src/wordagents/room'; export default {fetch(){return new Response('test')}}`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:*']});
+ const code = outputFiles[0].text;
+ const deck = Object.fromEntries([['themed',16],['technology',7],['wildcards',5]].map(([bucket,n])=>[bucket,Array.from({length:Number(n)},(_,i)=>bucket+' '+String.fromCharCode(65+i))]));
+ const priv = new Miniflare(convertV4MiniflareOptions({modules:true,script:code,compatibilityDate:'2024-12-01',compatibilityFlags:['nodejs_compat'],durableObjects:{ROOM:{className:'WordAgentsRoom',useSQLite:true}},bindings:{WORDAGENTS_AEO_DECK:JSON.stringify(deck),WORDAGENTS_TEAM_IDS:'1,2,3,4'}}));
+ try {
+  const space = await priv.getDurableObjectNamespace('ROOM');
+  const stub = space.get(space.idFromName('private'));
+  await stub.fetch('https://test/create',{method:'POST',body:JSON.stringify({roomCode:'TEAM'})});
+  async function reject(id:string) {
+   const response=await stub.fetch('https://test/?playerId='+id,{headers:{Upgrade:'websocket'}});
+   const ws=response.webSocket!; const frames: unknown[]=[];
+   const code = new Promise<number>(resolve=>ws.addEventListener('close', event=>resolve(event.code)));
+   ws.addEventListener('message', event=>frames.push(event.data)); ws.accept();
+   ws.send('{"type":"sync"}');
+   await expect(code).resolves.toBe(4403); expect(frames).toEqual([]);
+  }
+  const clients=[];
+  for (let i=1;i<=4;i++) {
+   const c=await connect('tg_'+i,stub);clients.push(c);c.send({type:'join'});
+   await expect.poll(()=>c.state()?.players.length).toBe(i);
+  }
+  const host=clients[0];
+  expect(host.state().availablePacks).toEqual(['classic','aeo']);
+  await reject('guest_1'); await reject('tg_5');
+  clients[1].send({type:'start',pack:'aeo'});
+  await expect.poll(()=>clients[1].frames.some(f=>f.message?.includes('Only the host'))).toBe(true);
+  host.send({type:'start',pack:'aeo'});
+  await expect.poll(()=>host.state()?.game?.cards.length).toBe(25);
+  expect(host.state().pack).toBe('aeo');
+  expect(host.state().game.cards.filter((c:any)=>c.word.startsWith('themed '))).toHaveLength(15);
+  await reject('tg_5');
+  const id=host.state().game.id, turn=host.state().game.turn;
+  const spy=clients.find(c=>c.state()?.you.role==='spymaster'&&c.state()?.you.team===turn)!;
+  const op=clients.find(c=>c.state()?.you.role==='operative'&&c.state()?.you.team===turn)!;
+  spy.send({type:'clue',word:'Conceptual',count:1,gameId:id,revision:host.state().revision});
+  await expect.poll(()=>op.state()?.game?.phase).toBe('guess');
+  op.send({type:'guess',index:spy.state().game.cards.findIndex((x:any)=>x.color==='assassin'),gameId:id,revision:op.state().revision});
+  await expect.poll(()=>host.state()?.game?.phase).toBe('finished');
+  host.send({type:'start'});
+  await expect.poll(()=>host.state()?.game?.id).not.toBe(id);
+  expect(host.state().pack).toBe('aeo');
+  for(const c of clients)c.ws.close();
+ } finally {await priv.dispose();}
 },30000);
