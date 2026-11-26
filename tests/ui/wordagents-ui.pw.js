@@ -24,13 +24,19 @@ const initial = () => ({
 const frames = (page) => page.evaluate(() => framesSent.map((s) => { try { return JSON.parse(s); } catch { return {}; } }));
 const push = (page, state) => page.evaluate((s) => fakeSocket.push(s), state);
 
-async function setup(page, state = initial()) {
+async function setup(page, state = initial(), { legacyLobby = false } = {}) {
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/me') return route.fulfill({ json: { displayName: 'Alex' } });
     if (url.pathname === '/api/config') return route.fulfill({ json: { botUsername: 'test_bot' } });
     const file = { '/wordagents/': 'wordagents/index.html', '/wordagents/wordagents.js': 'wordagents/wordagents.js', '/wordagents/wordagents.css': 'wordagents/wordagents.css', '/style.css': 'style.css', '/fc-auth.js': 'fc-auth.js', '/fc-host.js': 'fc-host.js' }[url.pathname];
-    if (file) return route.fulfill({ body: fs.readFileSync(path.join(root, file)), contentType: file.endsWith('.js') ? 'application/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
+    if (file) {
+      let body = fs.readFileSync(path.join(root, file), 'utf8');
+      if (legacyLobby && file === 'wordagents/index.html') {
+        body = body.replace(/<div id="lobby-team-(?:picker|choices)"[^>]*>[\s\S]*?<\/div>/g, '');
+      }
+      return route.fulfill({ body, contentType: file.endsWith('.js') ? 'application/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
+    }
     return route.abort();
   });
   await page.addInitScript((first) => {
@@ -345,4 +351,19 @@ test('AEO labels preserve case, wrap at narrow widths, and block normalized boar
   await expect(page.locator('#btn-clue')).toBeDisabled();
   await page.locator('#clue-input').fill('creamery');
   await expect(page.locator('#clue-error')).toHaveText('Too close to Ice-Cream, which is still on the board.');
+});
+
+
+test('a cached lobby page still works when the team-setup script is newer', async ({ page }) => {
+  const lobby = initial();
+  lobby.game = null;
+  lobby.teamMode = 'random';
+  lobby.players = lobby.players.map(player => ({ ...player, team: null, role: null }));
+  lobby.you = { ...lobby.you, team: null, role: null };
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await setup(page, lobby, { legacyLobby: true });
+  await expect(page.locator('#lobby-roster .wa-member')).toHaveCount(4);
+  await expect(page.locator('#btn-start')).toBeEnabled();
+  expect(errors).toEqual([]);
 });

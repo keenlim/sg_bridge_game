@@ -380,9 +380,10 @@ function renderLobbyLoading() {
   $('lobby-pack-picker').classList.add('hidden');
   $('lobby-pack').disabled = true;
   $('lobby-pack').removeAttribute('data-selection-key');
-  $('lobby-team-picker').classList.add('hidden');
-  $('lobby-team-choices').classList.add('hidden');
-  $('lobby-team-mode').disabled = true;
+  $('lobby-team-picker')?.classList.add('hidden');
+  $('lobby-team-choices')?.classList.add('hidden');
+  const mode = $('lobby-team-mode');
+  if (mode) mode.disabled = true;
   $('lobby-roster').replaceChildren(el('div', 'wa-open-slot', 'Connecting to the room…'));
   $('lobby-checklist').replaceChildren();
   $('lobby-wait').textContent = '';
@@ -448,15 +449,19 @@ function renderLobby() {
   const host = isHost();
   const manual = view.teamMode === 'choose';
   const mode = $('lobby-team-mode');
-  $('lobby-team-picker').classList.toggle('hidden', !host || !view.teamMode);
-  mode.value = manual ? 'choose' : 'random';
-  mode.disabled = !host || !connected() || pending;
+  $('lobby-team-picker')?.classList.toggle('hidden', !host || !view.teamMode);
+  if (mode) {
+    mode.value = manual ? 'choose' : 'random';
+    mode.disabled = !host || !connected() || pending;
+  }
   $('screen-lobby').querySelector('.wa-lobby-note').textContent = manual
-    ? 'Players choose Red or Blue. One spymaster per team is picked at random.'
+    ? (mode ? 'Players choose Red or Blue. One spymaster per team is picked at random.'
+      : 'Refresh this page to use Choose teams.')
     : 'Teams and roles are assigned randomly at the start of every round.';
-  $('lobby-team-choices').classList.toggle('hidden', !manual || !seated);
-  for (const team of ['red', 'blue']) {
+  $('lobby-team-choices')?.classList.toggle('hidden', !manual || !seated);
+  for (const team of TEAMS) {
     const button = $(`btn-pick-${team}`);
+    if (!button) continue; // A cached lobby template may predate the new controls.
     button.setAttribute('aria-pressed', String(you.team === team));
     button.disabled = !manual || !seated || !connected() || pending;
   }
@@ -496,7 +501,7 @@ function renderLobby() {
     packSelect.dataset.selectionKey = selectionKey;
   }
   $('btn-start').classList.toggle('hidden', !host);
-  $('btn-start').disabled = !valid || !connected() || pending;
+  $('btn-start').disabled = !valid || !connected() || pending || (manual && !mode);
   $('btn-take-seat').classList.toggle('hidden', !profile || seated || !!you.removed);
   $('btn-take-seat').disabled = !connected() || pending || view.players.length >= (view.maxPlayers || 12);
   const hostName = view.players.find((p) => p.id === view.hostId)?.name;
@@ -961,16 +966,16 @@ $('btn-share').addEventListener('click', shareInvite);
 $('btn-leave').addEventListener('click', leave);
 $('btn-sound').addEventListener('click', () => { sfx.toggle(); renderTopBar(); });
 $('btn-take-seat').addEventListener('click', () => { if (connected()) send('join'); });
-$('lobby-team-mode').addEventListener('change', (event) => {
+$('lobby-team-mode')?.addEventListener('change', (event) => {
   if (isHost() && !view.game) send('teamMode', { mode: event.target.value });
 });
-for (const team of ['red', 'blue']) {
-  $(`btn-pick-${team}`).addEventListener('click', () => send('pickTeam', { team }));
+for (const team of TEAMS) {
+  $(`btn-pick-${team}`)?.addEventListener('click', () => send('pickTeam', { team }));
 }
 $('btn-start').addEventListener('click', () => {
   if (!isHost() || view.game) return;
   const pack = view.availablePacks?.includes('aeo') && $('lobby-pack').value === 'aeo' ? 'aeo' : 'classic';
-  send('start', { pack });
+  send('start', { pack, teamMode: view.teamMode, revision: view.teamMode === 'choose' ? view.revision : undefined });
 });
 $('btn-again').addEventListener('click', () => { if (send('start')) hideModal('modal-over'); });
 $('btn-to-lobby').addEventListener('click', () => send('lobby'));

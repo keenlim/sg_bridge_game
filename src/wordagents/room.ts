@@ -160,10 +160,9 @@ export class WordAgentsRoom extends DurableObject<Env> {
             if (state.game) throw new Error('Change team setup only in the lobby.');
             const mode = msg.mode;
             if (mode !== 'random' && mode !== 'choose') throw new Error('Choose a known team setup.');
-            if (mode !== (state.teamMode ?? 'random')) {
-              state.teamMode = mode;
-              for (const p of state.players) { p.team = null; p.role = null; }
-            }
+            if (mode === (state.teamMode ?? 'random')) { this.send(ws, state, session.id); return; }
+            state.teamMode = mode;
+            for (const p of state.players) { p.team = null; p.role = null; }
             break;
           }
           case 'pickTeam':
@@ -171,11 +170,19 @@ export class WordAgentsRoom extends DurableObject<Env> {
             if (!player) throw new Error('Join the room before choosing a team.');
             if (state.teamMode !== 'choose') throw new Error('The host has set this room to random teams.');
             if (msg.team !== 'red' && msg.team !== 'blue') throw new Error('Choose Red or Blue.');
+            if (player.team === msg.team) { this.send(ws, state, session.id); return; }
             player.team = msg.team;
             break;
           case 'start': {
             if (!host) throw new Error('Only the host can start.');
             if (active) throw new Error('Finish the round first.');
+            const teamMode = state.teamMode ?? 'random';
+            // Only launch a manually selected roster the host has actually seen.
+            // Existing Random clients may not send a mode or lobby revision.
+            if ((msg.teamMode !== undefined && msg.teamMode !== teamMode) ||
+              (teamMode === 'choose' && (msg.revision !== state.revision || msg.gameId !== state.game?.id))) {
+              throw new Error('Team setup changed. Review the roster and try again.');
+            }
             if (state.players.length < 4) throw new Error('At least four players are needed to start.');
             if (state.players.some(p => !p.connected)) {
               throw new Error('Everyone in the room must be connected. Remove offline players or wait for them.');
@@ -188,7 +195,7 @@ export class WordAgentsRoom extends DurableObject<Env> {
             if (state.game && pack !== (state.pack ?? 'classic')) throw new Error('Return to the lobby to change packs.');
             const deck = privateRoom ? this.teamConfig.deck : PUBLIC_AEO_DECK;
             if (pack === 'aeo' && !deck) throw new Error('The AEO word pack is not available.');
-            const chosenTeams = state.teamMode === 'choose' ? TEAMS.map(team => state.players.filter(p => p.team === team)) : null;
+            const chosenTeams = teamMode === 'choose' ? TEAMS.map(team => state.players.filter(p => p.team === team)) : null;
             if (chosenTeams) {
               if (state.players.some(p => !p.team)) throw new Error('Everyone must choose a team.');
               if (chosenTeams.some(members => members.length < 2)) throw new Error('Red and Blue each need at least two players.');

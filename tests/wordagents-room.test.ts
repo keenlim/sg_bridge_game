@@ -315,27 +315,34 @@ it('lets only the host enable chosen teams and keeps player choices across recon
  const [host,blue]=clients;
  const guest=await connect('guest_choose',stub);
  let returning: Awaited<ReturnType<typeof connect>> | undefined;
+ const launch=(pack?:string)=>host.send({type:'start',teamMode:'choose',revision:host.state().revision,gameId:host.state().game?.id,pack});
  const error=async(c:typeof host,message:string)=>await expect.poll(()=>c.frames.some(f=>f.type==='error'&&f.message.includes(message))).toBe(true);
  try {
   expect(host.state().teamMode).toBe('random');
   blue.send({type:'teamMode',mode:'choose'});await error(blue,'Only the host');
   host.send({type:'teamMode',mode:'choose'});await expect.poll(()=>guest.state()?.teamMode).toBe('choose');
   guest.send({type:'pickTeam',team:'red'});await error(guest,'Join the room');
-  host.send({type:'start'});await error(host,'Everyone must choose');
+  launch();await error(host,'Everyone must choose');
   for(const [i,c] of clients.entries()){
    const team=i===1?'blue':'red';
    c.send({type:'pickTeam',team,playerId:'tg_999',role:'spymaster'});
    await expect.poll(()=>c.state()?.you.team).toBe(team);
   }
-  host.send({type:'start'});await error(host,'at least two players');
+  launch();await error(host,'at least two players');
   clients[4].send({type:'pickTeam',team:'blue'});
   await expect.poll(()=>host.state().players.filter((p:any)=>p.team==='blue')).toHaveLength(2);
   expect(host.state().players.every((p:any)=>p.role===null)).toBe(true);
   returning=await connect('tg_202',stub);await expect.poll(()=>returning?.state()?.you.team).toBe('blue');
   clients[1]=returning;
   const picks=(s:any)=>s.players.map((p:any)=>[p.id,p.team]);
+  const oldRevision=host.state().revision;
+  clients[2].send({type:'pickTeam',team:'blue'});
+  await expect.poll(()=>host.state().players.filter((p:any)=>p.team==='blue')).toHaveLength(3);
+  host.send({type:'start',teamMode:'choose',revision:oldRevision,pack:'aeo'});
+  await error(host,'Team setup changed');
+  expect(host.state().game).toBeNull();
   const chosen=picks(host.state());
-  host.send({type:'start',pack:'aeo'});await expect.poll(()=>guest.state()?.game?.phase).toBe('clue');
+  launch('aeo');await expect.poll(()=>guest.state()?.game?.phase).toBe('clue');
   expect(picks(host.state())).toEqual(chosen);
   expectAllocation(host.state().players,5);
   expect(guest.state().game.cards.every((c:any)=>c.color===null)).toBe(true);
@@ -348,7 +355,7 @@ it('lets only the host enable chosen teams and keeps player choices across recon
   await expect.poll(()=>op.state().game.phase).toBe('guess');
   op.send({type:'guess',index:spy.state().game.cards.findIndex((c:any)=>c.color==='assassin'),gameId:game.id,revision:op.state().revision});
   await expect.poll(()=>host.state().game.phase).toBe('finished');
-  host.send({type:'start'});await expect.poll(()=>guest.state()?.game?.id).not.toBe(game.id);
+  launch();await expect.poll(()=>guest.state()?.game?.id).not.toBe(game.id);
   expect(picks(guest.state())).toEqual(chosen);
   expect(guest.state().pack).toBe('aeo');
   host.send({type:'abandon'});await expect.poll(()=>guest.state().game).toBeNull();
