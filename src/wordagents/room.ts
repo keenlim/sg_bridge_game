@@ -3,8 +3,9 @@ import type { Env } from '../types';
 import { normalizePlayerName } from '../player-name';
 import { newGame, giveClue, guess, endTurn, toggleMark, gameView, shuffle, type Game, type Team } from './engine';
 
-import { readTeamConfig, type Pack } from './packs';
+import { readDeck, readTeamConfig, type Pack } from './packs';
 
+type WordAgentsEnv = Env & { WORDAGENTS_PUBLIC_AEO_DECK?: string };
 type Role = 'spymaster' | 'operative';
 interface Player { id: string; name: string; team: Team | null; role: Role | null; connected: boolean }
 interface State {
@@ -42,16 +43,19 @@ function randomizeTeams(players: Player[]): void {
   });
 }
 
-export class WordAgentsRoom extends DurableObject<Env> {
+export class WordAgentsRoom extends DurableObject<WordAgentsEnv> {
   private readonly teamConfig = readTeamConfig(this.env);
+  private readonly publicAeoDeck = readDeck(this.env.WORDAGENTS_PUBLIC_AEO_DECK);
 
   private requiresTeam(state: State | undefined) {
-    return this.teamConfig.restricted || state?.privateRoom === true || state?.pack === 'aeo';
+    // Only an explicitly public AEO selection can bypass the legacy AEO guard.
+    return this.teamConfig.restricted || state?.privateRoom === true ||
+      (state?.pack === 'aeo' && state.privateRoom !== false);
   }
 
   private sessions = new Map<WebSocket, Session>();
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: WordAgentsEnv) {
     super(ctx, env);
     for (const ws of ctx.getWebSockets()) {
       const s = ws.deserializeAttachment() as Session;
@@ -123,7 +127,8 @@ export class WordAgentsRoom extends DurableObject<Env> {
       if (this.sessions.get(ws) !== session) return;
       const state = await this.ctx.storage.get<State>('state');
       if (!state) return;
-      if (this.requiresTeam(state) && !this.teamConfig.members.has(session.id)) {
+      const privateRoom = this.requiresTeam(state);
+      if (privateRoom && !this.teamConfig.members.has(session.id)) {
         ws.close(4403, 'Team access required');
         return;
       }
@@ -162,9 +167,11 @@ export class WordAgentsRoom extends DurableObject<Env> {
             }
             const pack = requested ?? state.pack ?? 'classic';
             if (state.game && pack !== (state.pack ?? 'classic')) throw new Error('Return to the lobby to change packs.');
-            if (pack === 'aeo' && !this.teamConfig.deck) throw new Error('The team word pack is not available.');
-            const game = newGame(pack === 'aeo' ? this.teamConfig.deck! : undefined);
+            const deck = privateRoom ? this.teamConfig.deck : this.publicAeoDeck;
+            if (pack === 'aeo' && !deck) throw new Error('The AEO word pack is not available.');
+            const game = newGame(pack === 'aeo' ? deck! : undefined);
             randomizeTeams(state.players);
+            if (pack === 'aeo') state.privateRoom = privateRoom;
             state.pack = pack;
             state.game = game;
             break;
@@ -243,17 +250,19 @@ export class WordAgentsRoom extends DurableObject<Env> {
   }
 
   private send(ws: WebSocket, state: State, id: string, watchers = this.watchers(state)) {
-    if (this.requiresTeam(state) && !this.teamConfig.members.has(id)) {
+    const privateRoom = this.requiresTeam(state);
+    if (privateRoom && !this.teamConfig.members.has(id)) {
       try { ws.close(4403, 'Team access required'); } catch { /* socket closing */ }
       return;
     }
+    const deck = privateRoom ? this.teamConfig.deck : this.publicAeoDeck;
     const players = state.game ? state.players : state.players.map(p => ({ ...p, team: null, role: null }));
     const player = players.find(p => p.id === id);
     try {
       ws.send(JSON.stringify({
         type: 'state', roomCode: state.roomCode, revision: state.revision, hostId: effectiveHost(state),
         players, watchers, maxPlayers: MAX_PLAYERS,
-        ...(this.teamConfig.deck ? { availablePacks: ['classic', 'aeo'], pack: state.pack ?? 'classic' } : {}),
+        ...(deck ? { availablePacks: ['classic', 'aeo'], pack: state.pack ?? 'classic' } : {}),
         you: { id, team: player?.team ?? null, role: player?.role ?? null, removed: !player && !!state.removed?.includes(id) },
         game: state.game ? gameView(state.game, player?.role === 'spymaster') : null,
       }));
