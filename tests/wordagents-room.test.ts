@@ -1,6 +1,8 @@
 import {beforeAll,afterAll,it,expect} from 'vitest';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {build} from 'esbuild';
+import {readDeck} from '../src/wordagents/packs';
+import {PUBLIC_AEO_DECK} from '../src/wordagents/public-aeo-words';
 let mf: Miniflare, room: any, ns: any;
 beforeAll(async()=>{
  const {outputFiles}=await build({stdin:{contents:`export {WordAgentsRoom} from './src/wordagents/room'; export default {fetch(){return new Response('test')}}`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:*']});
@@ -33,7 +35,7 @@ it('enforces membership, roles, secret views, version guards and reconnect autho
   }
  }
  const guest=await connect('guest_x');guest.send({type:'join'});await expect.poll(()=>guest.frames.some(f=>f.message?.includes('Sign in'))).toBe(true);
- clients[0].send({type:'start',pack:'aeo'});await expect.poll(()=>clients[0].frames.some(f=>f.message?.includes('pack is not available'))).toBe(true);
+ clients[0].send({type:'start',pack:'unknown'});await expect.poll(()=>clients[0].frames.some(f=>f.message?.includes('Choose a known word pack'))).toBe(true);
  expect(clients[0].state().game).toBeNull();
  clients[0].send({type:'start'});await expect.poll(()=>clients[0].state()?.game?.phase).toBe('clue');
  await expect.poll(()=>clients.every(c=>c.state()?.game?.cards.length===25)).toBe(true);
@@ -165,3 +167,139 @@ it('only permits allowlisted sockets and keeps the selected pack on rematch', as
   for(const c of clients)c.ws.close();
  } finally {await priv.dispose();}
 },30000);
+
+async function publicPackTestWorker(bindings: Record<string, string> = {}): Promise<Miniflare> {
+  const { outputFiles } = await build({
+    stdin: {
+      contents: `
+        import { WordAgentsRoom } from './src/wordagents/room';
+        export class PublicPackTestRoom extends WordAgentsRoom {
+          async fetch(request) {
+            const path = new URL(request.url).pathname;
+            if (path === '/seed-legacy-classic' || path === '/seed-legacy-aeo') {
+              await this.ctx.storage.put('state', {
+                roomCode: 'OLD1', revision: 0, hostId: null, players: [], game: null,
+                ...(path === '/seed-legacy-aeo' ? { pack: 'aeo' } : {}),
+              });
+              return new Response(null, { status: 204 });
+            }
+            return super.fetch(request);
+          }
+        }
+        export default { fetch() { return new Response('test'); } };
+      `,
+      resolveDir: process.cwd(),
+    },
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'neutral',
+    external: ['cloudflare:*'],
+  });
+  return new Miniflare(convertV4MiniflareOptions({
+    modules: true,
+    script: outputFiles[0].text,
+    compatibilityDate: '2024-12-01',
+    compatibilityFlags: ['nodejs_compat'],
+    durableObjects: { ROOM: { className: 'PublicPackTestRoom', useSQLite: true } },
+    bindings,
+  }));
+}
+
+it('offers built-in public AEO to hosts while keeping legacy AEO rooms private', async () => {
+  expect(readDeck(JSON.stringify(PUBLIC_AEO_DECK))).toEqual(PUBLIC_AEO_DECK);
+  const worker = await publicPackTestWorker();
+  try {
+    const namespace = await worker.getDurableObjectNamespace('ROOM');
+    const publicRoom = namespace.get(namespace.idFromName('public-aeo'));
+    expect((await publicRoom.fetch('https://test/seed-legacy-classic', { method: 'POST' })).status).toBe(204);
+
+    const players = [];
+    for (let i = 1; i <= 4; i++) {
+      const player = await connect(`tg_${i}`, publicRoom);
+      players.push(player);
+      player.send({ type: 'join' });
+      await expect.poll(() => player.state()?.players.length).toBe(i);
+    }
+    const [host, teammate] = players;
+    const guest = await connect('guest_public', publicRoom);
+    await expect.poll(() => guest.state()?.availablePacks).toEqual(['classic', 'aeo']);
+    expect(host.state().pack).toBe('classic');
+    expect(guest.state().game).toBeNull();
+    teammate.send({ type: 'start', pack: 'aeo' });
+    await expect.poll(() => teammate.frames.some(frame => frame.message?.includes('Only the host'))).toBe(true);
+
+    host.send({ type: 'start', pack: 'aeo' });
+    await expect.poll(() => guest.state()?.game?.cards.length).toBe(25);
+    expect(guest.state().pack).toBe('aeo');
+    for (const [words, count] of [[PUBLIC_AEO_DECK.themed, 15], [PUBLIC_AEO_DECK.technology, 6], [PUBLIC_AEO_DECK.wildcards, 4]] as const) {
+      const bucket = new Set<string>(words);
+      expect(guest.state().game.cards.filter((card: { word: string }) => bucket.has(card.word))).toHaveLength(count);
+    }
+    expect(guest.state().game.cards.every((card: { color: string | null }) => card.color === null)).toBe(true);
+    const afterStart = await connect('guest_after_start', publicRoom);
+    await expect.poll(() => afterStart.state()?.pack).toBe('aeo');
+
+    const gameId = guest.state().game.id;
+    const startingTeam = guest.state().game.turn;
+    await expect.poll(() => players.every(player => player.state()?.game?.id === gameId)).toBe(true);
+    const spy = players.find(player => player.state().you.role === 'spymaster' && player.state().you.team === startingTeam)!;
+    const operative = players.find(player => player.state().you.role === 'operative' && player.state().you.team === startingTeam)!;
+    spy.send({ type: 'clue', word: 'Harmony', count: 1, gameId, revision: spy.state().revision });
+    await expect.poll(() => operative.state()?.game?.phase).toBe('guess');
+    const assassin = spy.state().game.cards.findIndex((card: { color: string }) => card.color === 'assassin');
+    operative.send({ type: 'guess', index: assassin, gameId, revision: operative.state().revision });
+    await expect.poll(() => host.state()?.game?.phase).toBe('finished');
+
+    host.send({ type: 'start' });
+    await expect.poll(() => guest.state()?.game?.id).not.toBe(gameId);
+    expect(guest.state().pack).toBe('aeo');
+    host.send({ type: 'abandon' });
+    await expect.poll(() => host.state()?.game).toBeNull();
+    host.send({ type: 'start', pack: 'classic' });
+    await expect.poll(() => guest.state()?.pack).toBe('classic');
+    expect(guest.state().game.cards).toHaveLength(25);
+
+    const legacy = namespace.get(namespace.idFromName('legacy-aeo'));
+    expect((await legacy.fetch('https://test/seed-legacy-aeo', { method: 'POST' })).status).toBe(204);
+    for (const id of ['guest_legacy', 'tg_9']) {
+      const response = await legacy.fetch(`https://test/?playerId=${id}`, { headers: { Upgrade: 'websocket' } });
+      const socket = response.webSocket!;
+      const frames: unknown[] = [];
+      const closed = new Promise<number>(resolve => socket.addEventListener('close', event => resolve(event.code)));
+      socket.addEventListener('message', event => frames.push(event.data));
+      socket.accept();
+      await expect(closed).resolves.toBe(4403);
+      expect(frames).toEqual([]);
+    }
+    for (const client of [...players, guest, afterStart]) client.ws.close();
+  } finally {
+    await worker.dispose();
+  }
+}, 30000);
+
+it('does not fall back to the public deck in a team-only room with no private deck', async () => {
+  const worker = await publicPackTestWorker({ WORDAGENTS_TEAM_IDS: '1,2,3,4' });
+  try {
+    const namespace = await worker.getDurableObjectNamespace('ROOM');
+    const room = namespace.get(namespace.idFromName('missing-private-aeo'));
+    await room.fetch('https://test/create', { method: 'POST', body: JSON.stringify({ roomCode: 'CLSC' }) });
+    const players = [];
+    for (let i = 1; i <= 4; i++) {
+      const player = await connect(`tg_${i}`, room);
+      players.push(player);
+      player.send({ type: 'join' });
+      await expect.poll(() => player.state()?.players.length).toBe(i);
+    }
+    const [host] = players;
+    expect(host.state().availablePacks ?? []).not.toContain('aeo');
+    host.send({ type: 'start', pack: 'aeo' });
+    await expect.poll(() => host.frames.some(frame => frame.message?.includes('pack is not available'))).toBe(true);
+    expect(host.state().game).toBeNull();
+    host.send({ type: 'start', pack: 'classic' });
+    await expect.poll(() => host.state()?.game?.cards.length).toBe(25);
+    for (const player of players) player.ws.close();
+  } finally {
+    await worker.dispose();
+  }
+}, 30000);
