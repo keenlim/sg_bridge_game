@@ -2,6 +2,7 @@
 // players (one on touch mobile) and a signed-out watcher play real rounds through the UI.
 const { test, expect } = require('@playwright/test');
 const { startWorker } = require('./live-worker.cjs');
+const { PUBLIC_AEO_DECK } = require('../../src/wordagents/public-aeo-words.ts');
 let worker;
 test.beforeAll(async () => { worker = await startWorker(4250); });
 test.afterAll(async () => { await worker?.stop(); });
@@ -127,4 +128,44 @@ test('a second tab takes over the seat and the first tab can reclaim it', async 
   await expect(b.locator('#screen-home')).toHaveClass(/active/);
   expect(a.errors).toEqual([]);
   await a.context.close();
+});
+
+
+test('public AEO picker works for a touch host and the board survives reload', async ({ browser }) => {
+  test.setTimeout(90000);
+  const clients = [];
+  try {
+    const host = await client(browser, 'Theme Host', '', true);
+    clients.push(host);
+    await press(host, host.page.locator('#btn-create'));
+    await expect.poll(async () => (await state(host.page))?.players.length).toBe(1);
+    const room = (await state(host.page)).roomCode;
+    for (const name of ['Theme Bob', 'Theme Cara', 'Theme Dan', null]) {
+      clients.push(await client(browser, name, room, name === null));
+    }
+    const guest = clients.at(-1);
+    await expect.poll(async () => (await state(host.page))?.players.length).toBe(4);
+    await expect(host.page.locator('#lobby-pack')).toHaveValue('classic');
+    for (const c of clients.slice(1)) await expect(c.page.locator('#lobby-pack')).toBeHidden();
+    await host.page.locator('#lobby-pack').selectOption('aeo');
+    await press(host, host.page.locator('#btn-start'));
+    for (const c of clients) {
+      await expect(c.page.locator('#game-pack-badge')).toBeVisible();
+      await expect(c.page.locator('.wa-card')).toHaveCount(25);
+    }
+    const board = (await state(guest.page)).game;
+    const words = board.cards.map((card) => card.word);
+    expect(new Set(words).size).toBe(25);
+    for (const [key, count] of [['themed', 15], ['technology', 6], ['wildcards', 4]]) {
+      expect(words.filter((word) => PUBLIC_AEO_DECK[key].includes(word))).toHaveLength(count);
+    }
+    expect(board.cards.every((card) => card.color === null)).toBe(true);
+    await host.page.reload();
+    await expect(host.page.locator('#game-pack-badge')).toBeVisible();
+    expect((await state(host.page)).game.id).toBe(board.id);
+    expect((await state(host.page)).game.cards.map((card) => card.word)).toEqual(words);
+    for (const c of clients) expect(c.errors).toEqual([]);
+  } finally {
+    await Promise.all(clients.map((c) => c.context.close()));
+  }
 });
