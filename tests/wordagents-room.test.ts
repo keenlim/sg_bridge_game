@@ -1,6 +1,8 @@
 import {beforeAll,afterAll,it,expect} from 'vitest';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {build} from 'esbuild';
+import {readDeck} from '../src/wordagents/packs';
+import {PUBLIC_AEO_DECK} from '../src/wordagents/public-aeo-words';
 let mf: Miniflare, room: any, ns: any;
 beforeAll(async()=>{
  const {outputFiles}=await build({stdin:{contents:`export {WordAgentsRoom} from './src/wordagents/room'; export default {fetch(){return new Response('test')}}`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:*']});
@@ -33,7 +35,7 @@ it('enforces membership, roles, secret views, version guards and reconnect autho
   }
  }
  const guest=await connect('guest_x');guest.send({type:'join'});await expect.poll(()=>guest.frames.some(f=>f.message?.includes('Sign in'))).toBe(true);
- clients[0].send({type:'start',pack:'aeo'});await expect.poll(()=>clients[0].frames.some(f=>f.message?.includes('pack is not available'))).toBe(true);
+ clients[0].send({type:'start',pack:'unknown'});await expect.poll(()=>clients[0].frames.some(f=>f.message?.includes('Choose a known word pack'))).toBe(true);
  expect(clients[0].state().game).toBeNull();
  clients[0].send({type:'start'});await expect.poll(()=>clients[0].state()?.game?.phase).toBe('clue');
  await expect.poll(()=>clients.every(c=>c.state()?.game?.cards.length===25)).toBe(true);
@@ -166,7 +168,7 @@ it('only permits allowlisted sockets and keeps the selected pack on rematch', as
  } finally {await priv.dispose();}
 },30000);
 
-async function publicPackTestWorker(publicDeck: string): Promise<Miniflare> {
+async function publicPackTestWorker(bindings: Record<string, string> = {}): Promise<Miniflare> {
   const { outputFiles } = await build({
     stdin: {
       contents: `
@@ -200,17 +202,13 @@ async function publicPackTestWorker(publicDeck: string): Promise<Miniflare> {
     compatibilityDate: '2024-12-01',
     compatibilityFlags: ['nodejs_compat'],
     durableObjects: { ROOM: { className: 'PublicPackTestRoom', useSQLite: true } },
-    bindings: { WORDAGENTS_PUBLIC_AEO_DECK: publicDeck },
+    bindings,
   }));
 }
 
-it('offers public AEO to hosts while keeping legacy AEO rooms private', async () => {
-  const labels = (prefix: string, count: number) => Array.from({ length: count }, (_, i) => `${prefix} ${i + 1}`);
-  const worker = await publicPackTestWorker(JSON.stringify({
-    themed: labels('Fictional Mission', 15),
-    technology: labels('Demo Circuit', 6),
-    wildcards: labels('Imaginary Planet', 4),
-  }));
+it('offers built-in public AEO to hosts while keeping legacy AEO rooms private', async () => {
+  expect(readDeck(JSON.stringify(PUBLIC_AEO_DECK))).toEqual(PUBLIC_AEO_DECK);
+  const worker = await publicPackTestWorker();
   try {
     const namespace = await worker.getDurableObjectNamespace('ROOM');
     const publicRoom = namespace.get(namespace.idFromName('public-aeo'));
@@ -234,8 +232,9 @@ it('offers public AEO to hosts while keeping legacy AEO rooms private', async ()
     host.send({ type: 'start', pack: 'aeo' });
     await expect.poll(() => guest.state()?.game?.cards.length).toBe(25);
     expect(guest.state().pack).toBe('aeo');
-    for (const [prefix, count] of [['Fictional Mission', 15], ['Demo Circuit', 6], ['Imaginary Planet', 4]] as const) {
-      expect(guest.state().game.cards.filter((card: { word: string }) => card.word.startsWith(prefix))).toHaveLength(count);
+    for (const [words, count] of [[PUBLIC_AEO_DECK.themed, 15], [PUBLIC_AEO_DECK.technology, 6], [PUBLIC_AEO_DECK.wildcards, 4]] as const) {
+      const bucket = new Set<string>(words);
+      expect(guest.state().game.cards.filter((card: { word: string }) => bucket.has(card.word))).toHaveLength(count);
     }
     expect(guest.state().game.cards.every((card: { color: string | null }) => card.color === null)).toBe(true);
     const afterStart = await connect('guest_after_start', publicRoom);
@@ -279,11 +278,11 @@ it('offers public AEO to hosts while keeping legacy AEO rooms private', async ()
   }
 }, 30000);
 
-it('does not offer or start public AEO when the public deck is invalid', async () => {
-  const worker = await publicPackTestWorker('{"themed":["Too Few"]}');
+it('does not fall back to the public deck in a team-only room with no private deck', async () => {
+  const worker = await publicPackTestWorker({ WORDAGENTS_TEAM_IDS: '1,2,3,4' });
   try {
     const namespace = await worker.getDurableObjectNamespace('ROOM');
-    const room = namespace.get(namespace.idFromName('invalid-public-aeo'));
+    const room = namespace.get(namespace.idFromName('missing-private-aeo'));
     await room.fetch('https://test/create', { method: 'POST', body: JSON.stringify({ roomCode: 'CLSC' }) });
     const players = [];
     for (let i = 1; i <= 4; i++) {

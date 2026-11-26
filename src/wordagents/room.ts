@@ -3,9 +3,9 @@ import type { Env } from '../types';
 import { normalizePlayerName } from '../player-name';
 import { newGame, giveClue, guess, endTurn, toggleMark, gameView, shuffle, type Game, type Team } from './engine';
 
-import { readDeck, readTeamConfig, type Pack } from './packs';
+import { readTeamConfig, type Pack } from './packs';
+import { PUBLIC_AEO_DECK } from './public-aeo-words';
 
-type WordAgentsEnv = Env & { WORDAGENTS_PUBLIC_AEO_DECK?: string };
 type Role = 'spymaster' | 'operative';
 interface Player { id: string; name: string; team: Team | null; role: Role | null; connected: boolean }
 interface State {
@@ -43,9 +43,8 @@ function randomizeTeams(players: Player[]): void {
   });
 }
 
-export class WordAgentsRoom extends DurableObject<WordAgentsEnv> {
+export class WordAgentsRoom extends DurableObject<Env> {
   private readonly teamConfig = readTeamConfig(this.env);
-  private readonly publicAeoDeck = readDeck(this.env.WORDAGENTS_PUBLIC_AEO_DECK);
 
   private requiresTeam(state: State | undefined) {
     // Only an explicitly public AEO selection can bypass the legacy AEO guard.
@@ -55,7 +54,7 @@ export class WordAgentsRoom extends DurableObject<WordAgentsEnv> {
 
   private sessions = new Map<WebSocket, Session>();
 
-  constructor(ctx: DurableObjectState, env: WordAgentsEnv) {
+  constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     for (const ws of ctx.getWebSockets()) {
       const s = ws.deserializeAttachment() as Session;
@@ -167,7 +166,7 @@ export class WordAgentsRoom extends DurableObject<WordAgentsEnv> {
             }
             const pack = requested ?? state.pack ?? 'classic';
             if (state.game && pack !== (state.pack ?? 'classic')) throw new Error('Return to the lobby to change packs.');
-            const deck = privateRoom ? this.teamConfig.deck : this.publicAeoDeck;
+            const deck = privateRoom ? this.teamConfig.deck : PUBLIC_AEO_DECK;
             if (pack === 'aeo' && !deck) throw new Error('The AEO word pack is not available.');
             const game = newGame(pack === 'aeo' ? deck! : undefined);
             randomizeTeams(state.players);
@@ -255,7 +254,7 @@ export class WordAgentsRoom extends DurableObject<WordAgentsEnv> {
       try { ws.close(4403, 'Team access required'); } catch { /* socket closing */ }
       return;
     }
-    const deck = privateRoom ? this.teamConfig.deck : this.publicAeoDeck;
+    const deck = privateRoom ? this.teamConfig.deck : PUBLIC_AEO_DECK;
     const players = state.game ? state.players : state.players.map(p => ({ ...p, team: null, role: null }));
     const player = players.find(p => p.id === id);
     try {
