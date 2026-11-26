@@ -170,7 +170,7 @@ test('public AEO picker works for a touch host and the board survives reload', a
   }
 });
 
-test('host enables Choose teams and players keep their sides at launch', async ({ browser }) => {
+test('host combines Choose teams with public AEO and players keep their sides', async ({ browser }) => {
   test.setTimeout(90000);
   const clients = [];
   try {
@@ -198,9 +198,16 @@ test('host enables Choose teams and players keep their sides at launch', async (
     await bob.page.reload();
     await expect(bob.page.getByRole('button', { name: 'Join Blue' })).toHaveAttribute('aria-pressed', 'true');
     await expect(host.page.locator('#btn-start')).toBeEnabled();
+    await host.page.locator('#lobby-pack').selectOption('aeo');
     await press(host, host.page.locator('#btn-start'));
     await expect(guest.page.locator('#screen-game')).toHaveClass(/active/);
     const launched = await state(host.page);
+    expect(launched.pack).toBe('aeo');
+    const words = launched.game.cards.map((card) => card.word);
+    expect(new Set(words).size).toBe(25);
+    for (const [key, count] of [['themed', 15], ['technology', 6], ['wildcards', 4]]) {
+      expect(words.filter((word) => PUBLIC_AEO_DECK[key].includes(word))).toHaveLength(count);
+    }
     expect(launched.players.map((p) => [p.name, p.team])).toEqual([
       ['Pick Host', 'red'], ['Pick Bob', 'blue'], ['Pick Cara', 'red'], ['Pick Dan', 'blue'],
     ]);

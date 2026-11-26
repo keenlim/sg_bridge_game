@@ -43,8 +43,8 @@ npm run test:pr               # always, before merge
 
 ## Public word pack
 
-The public Worker includes a 70-card AEO-themed word bank with general AI,
-engineering, teamwork, and wildcard words. Each board draws 15 themed words,
+The public Worker includes a 168-card AEO-themed word bank with AEO platform
+labels, common AI, delivery and workplace terms, and Singapore-themed wildcards. Each board draws 15 themed words,
 six technology words, and four wildcards. Players and guests can see the dealt
 words. The public word bank ships with the game and needs no runtime settings.
 

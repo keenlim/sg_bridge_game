@@ -206,6 +206,15 @@ async function publicPackTestWorker(bindings: Record<string, string> = {}): Prom
   }));
 }
 
+it('bundles the refreshed public AEO bank and leaves challenge cards out', () => {
+  const { themed, technology, wildcards } = PUBLIC_AEO_DECK;
+  expect([themed.length, technology.length, wildcards.length]).toEqual([58, 63, 47]);
+  expect(themed).toEqual(expect.arrayContaining(['genCentral', 'AskNav', 'searchCentral', 'Member-facing']));
+  expect(technology).toEqual(expect.arrayContaining(['Harness', 'LLM', 'GPT-6-Luna']));
+  expect(wildcards).toEqual(expect.arrayContaining(['Meat Proxy', 'snacCentral', 'Caifan', 'toriQ', 'Jollibee', 'TON Coffee', 'Square2', 'Stuffd', 'Alchemist', 'Matcha']));
+  expect([...themed, ...technology, ...wildcards]).not.toEqual(expect.arrayContaining(['Vector']));
+});
+
 it('offers built-in public AEO to hosts while keeping legacy AEO rooms private', async () => {
   expect(readDeck(JSON.stringify(PUBLIC_AEO_DECK))).toEqual(PUBLIC_AEO_DECK);
   const worker = await publicPackTestWorker();
