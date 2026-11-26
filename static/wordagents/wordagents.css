@@ -416,3 +416,15 @@ body.modal-open { overflow: hidden; }
 .wa-pack-picker select { padding: 6px 12px; min-height: 38px; border: 1px solid var(--wa-gold); border-radius: 8px; background: #191822; color: var(--wa-gold); font: inherit; }
 .wa-pack-badge { display: inline-block; width: fit-content; margin: 4px auto; padding: 3px 8px; border: 1px solid rgba(243, 194, 102, 0.45); border-radius: 99px; color: var(--wa-gold); font: 700 0.68rem var(--font); }
 .wa-board-aeo .wa-word { text-transform: none; overflow-wrap: anywhere; }
+
+/* Player-selected sides: the words identify teams independently of color. */
+.wa-team-choices:not(.hidden) { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 12px; }
+.wa-team-choices .btn { min-width: 106px; min-height: 44px; }
+.wa-team-choices .red, .wa-lobby-side.red { --side: var(--wa-red); }
+.wa-team-choices .blue, .wa-lobby-side.blue { --side: var(--wa-blue); }
+.wa-team-choices .btn[aria-pressed="true"] { border-color: var(--side); box-shadow: inset 0 -3px var(--side); font-weight: 800; }
+.wa-lobby-sides { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wa-lobby-side { min-width: 0; }
+.wa-lobby-side .wa-slot-label { color: var(--side, var(--text-dim)); }
+.wa-lobby-side.unassigned { grid-column: 1 / -1; }
+@media (max-width: 480px) { .wa-lobby-sides { grid-template-columns: minmax(0, 1fr); } }

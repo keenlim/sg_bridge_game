@@ -169,3 +169,43 @@ test('public AEO picker works for a touch host and the board survives reload', a
     await Promise.all(clients.map((c) => c.context.close()));
   }
 });
+
+test('host enables Choose teams and players keep their sides at launch', async ({ browser }) => {
+  test.setTimeout(90000);
+  const clients = [];
+  try {
+    const host = await client(browser, 'Pick Host', '', true);
+    clients.push(host);
+    await press(host, host.page.locator('#btn-create'));
+    await expect.poll(async () => (await state(host.page))?.players.length).toBe(1);
+    const room = (await state(host.page)).roomCode;
+    for (const name of ['Pick Bob', 'Pick Cara', 'Pick Dan', null]) clients.push(await client(browser, name, room));
+    const [alice, bob, cara, dan, guest] = clients;
+    const mode = host.page.getByLabel('Team setup', { exact: true });
+    await expect(mode).toHaveValue('random');
+    await expect(guest.page.getByLabel('Team setup', { exact: true })).toBeHidden();
+    await mode.selectOption('choose');
+    await expect(guest.page.locator('.wa-lobby-note')).toContainText('choose Red or Blue');
+    await expect(guest.page.getByRole('button', { name: 'Join Red' })).toBeHidden();
+    await expect(host.page.locator('#btn-start')).toBeDisabled();
+    for (const [c, side] of [[alice, 'Red'], [bob, 'Blue'], [cara, 'Red'], [dan, 'Blue']]) {
+      const pick = c.page.getByRole('button', { name: 'Join ' + side });
+      await press(c, pick);
+      await expect(pick).toHaveAttribute('aria-pressed', 'true');
+    }
+    await expect(host.page.locator('#lobby-roster')).toContainText('Red team · 2');
+    await expect(host.page.locator('#lobby-roster')).toContainText('Blue team · 2');
+    await bob.page.reload();
+    await expect(bob.page.getByRole('button', { name: 'Join Blue' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(host.page.locator('#btn-start')).toBeEnabled();
+    await press(host, host.page.locator('#btn-start'));
+    await expect(guest.page.locator('#screen-game')).toHaveClass(/active/);
+    const launched = await state(host.page);
+    expect(launched.players.map((p) => [p.name, p.team])).toEqual([
+      ['Pick Host', 'red'], ['Pick Bob', 'blue'], ['Pick Cara', 'red'], ['Pick Dan', 'blue'],
+    ]);
+    for (const c of clients) expect(c.errors).toEqual([]);
+  } finally {
+    for (const c of clients) await c.context.close();
+  }
+});

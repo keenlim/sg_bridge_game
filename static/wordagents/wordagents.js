@@ -380,6 +380,9 @@ function renderLobbyLoading() {
   $('lobby-pack-picker').classList.add('hidden');
   $('lobby-pack').disabled = true;
   $('lobby-pack').removeAttribute('data-selection-key');
+  $('lobby-team-picker').classList.add('hidden');
+  $('lobby-team-choices').classList.add('hidden');
+  $('lobby-team-mode').disabled = true;
   $('lobby-roster').replaceChildren(el('div', 'wa-open-slot', 'Connecting to the room…'));
   $('lobby-checklist').replaceChildren();
   $('lobby-wait').textContent = '';
@@ -398,7 +401,7 @@ function avatar(p, team) {
 
 function memberRow(p) {
   const row = el('div', 'wa-member');
-  row.append(avatar(p));
+  row.append(avatar(p, p.team));
   const name = el('div', 'wa-member-name', p.name);
   if (p.id === view.you?.id) name.append(el('span', 'wa-badge', 'you'));
   if (p.id === view.hostId) name.append(el('span', 'wa-badge host', '👑 host'));
@@ -426,23 +429,61 @@ function lobbyReadiness() {
     { ok: enough, text: `${players.length}/4+ players` },
     { ok: allOnline, text: 'All players online' },
   ];
-  return { items, valid: enough && allOnline, enough };
+  const allPicked = players.every(p => p.team === 'red' || p.team === 'blue');
+  const readySides = ['red', 'blue'].every(team => players.filter(p => p.team === team).length >= 2);
+  const manual = view.teamMode === 'choose';
+  if (manual) items.push(
+    { ok: allPicked && enough, text: 'Everyone picked a team' },
+    { ok: readySides, text: 'At least two per team' },
+  );
+  const teamIssue = !manual ? '' : !allPicked ? 'Everyone must choose Red or Blue.' :
+    !readySides ? 'Red and Blue each need at least two players.' : '';
+  return { items, valid: enough && allOnline && !teamIssue, enough, allOnline, teamIssue };
 }
 
 function renderLobby() {
   const you = view.you || {};
   const seated = !!me();
   $('lobby-code').textContent = view.roomCode;
-  const list = el('div', 'wa-roster-list');
-  list.append(...view.players.map(memberRow));
-  $('lobby-roster').replaceChildren(
-    el('h3', 'wa-slot-label', `Players · ${view.players.length}/${view.maxPlayers || 12}`),
-    view.players.length ? list : el('div', 'wa-open-slot', 'No players have joined yet'),
-  );
-
-  const { items, valid, enough } = lobbyReadiness();
-  $('lobby-checklist').replaceChildren(...items.map((item) => el('li', item.ok ? 'ok' : '', item.text)));
   const host = isHost();
+  const manual = view.teamMode === 'choose';
+  const mode = $('lobby-team-mode');
+  $('lobby-team-picker').classList.toggle('hidden', !host || !view.teamMode);
+  mode.value = manual ? 'choose' : 'random';
+  mode.disabled = !host || !connected() || pending;
+  $('screen-lobby').querySelector('.wa-lobby-note').textContent = manual
+    ? 'Players choose Red or Blue. One spymaster per team is picked at random.'
+    : 'Teams and roles are assigned randomly at the start of every round.';
+  $('lobby-team-choices').classList.toggle('hidden', !manual || !seated);
+  for (const team of ['red', 'blue']) {
+    const button = $(`btn-pick-${team}`);
+    button.setAttribute('aria-pressed', String(you.team === team));
+    button.disabled = !manual || !seated || !connected() || pending;
+  }
+  const roster = $('lobby-roster');
+  roster.replaceChildren(el('h3', 'wa-slot-label', `Players · ${view.players.length}/${view.maxPlayers || 12}`));
+  const makeList = (players) => {
+    const list = el('div', 'wa-roster-list');
+    list.append(...players.map(memberRow));
+    return list;
+  };
+  if (!manual) {
+    roster.append(view.players.length ? makeList(view.players) : el('div', 'wa-open-slot', 'No players have joined yet'));
+  } else {
+    const sides = el('div', 'wa-lobby-sides');
+    for (const team of ['red', 'blue', null]) {
+      const players = view.players.filter(p => p.team === team);
+      if (!team && !players.length) continue;
+      const section = el('section', `wa-lobby-side ${team ?? 'unassigned'}`);
+      section.append(el('h4', 'wa-slot-label', `${team ? teamName(team) + ' team' : 'Not picked yet'} · ${players.length}`));
+      section.append(players.length ? makeList(players) : el('div', 'wa-open-slot', 'No players yet'));
+      sides.append(section);
+    }
+    roster.append(sides);
+  }
+
+  const { items, allOnline, valid, enough, teamIssue } = lobbyReadiness();
+  $('lobby-checklist').replaceChildren(...items.map((item) => el('li', item.ok ? 'ok' : '', item.text)));
   const activePack = view.pack === 'aeo' ? 'aeo' : 'classic';
   const canChoosePack = host && view.availablePacks?.includes('aeo');
   const packSelect = $('lobby-pack');
@@ -464,7 +505,8 @@ function renderLobby() {
     : !profile ? 'You are watching. Sign in with Telegram below to play.'
     : !seated ? view.players.length >= (view.maxPlayers || 12) ? 'This room is full. You can watch.' : 'You are watching. Join this room to play.'
     : !enough ? 'Waiting for at least four players.'
-    : !valid ? host ? 'Wait for offline players or remove them to start.' : 'Waiting for everyone to be online.'
+    : !allOnline ? host ? 'Wait for offline players or remove them to start.' : 'Waiting for everyone to be online.'
+    : teamIssue ? teamIssue
     : host ? 'Everyone is ready. Start when you are.' : `Everyone is ready. Waiting for ${hostName || 'the host'} to start.`;
 }
 
@@ -747,12 +789,13 @@ function showOverModal(g) {
   $('btn-again').classList.toggle('hidden', !host);
   $('btn-to-lobby').classList.toggle('hidden', !host);
   $('over-wait').classList.toggle('hidden', host);
-  const { valid, enough } = lobbyReadiness();
+  const { valid, enough, allOnline, teamIssue } = lobbyReadiness();
+  $('btn-again').textContent = view.teamMode === 'choose' ? 'New round · same teams' : 'New round · random teams';
   $('btn-again').disabled = !valid || !connected() || pending;
   $('over-blocked').classList.toggle('hidden', !host || valid);
-  $('over-blocked').textContent = enough
-    ? 'Wait for offline players or go back to the lobby to remove them.'
-    : 'Go back to the lobby to invite more players. Four are needed.';
+  $('over-blocked').textContent = !enough ? 'Go back to the lobby to invite more players. Four are needed.'
+    : !allOnline ? 'Wait for offline players or go back to the lobby to remove them.'
+    : `${teamIssue} Go back to the lobby to adjust teams.`;
   $('btn-to-lobby').disabled = !connected() || pending;
   showModal('modal-over');
 }
@@ -918,6 +961,12 @@ $('btn-share').addEventListener('click', shareInvite);
 $('btn-leave').addEventListener('click', leave);
 $('btn-sound').addEventListener('click', () => { sfx.toggle(); renderTopBar(); });
 $('btn-take-seat').addEventListener('click', () => { if (connected()) send('join'); });
+$('lobby-team-mode').addEventListener('change', (event) => {
+  if (isHost() && !view.game) send('teamMode', { mode: event.target.value });
+});
+for (const team of ['red', 'blue']) {
+  $(`btn-pick-${team}`).addEventListener('click', () => send('pickTeam', { team }));
+}
 $('btn-start').addEventListener('click', () => {
   if (!isHost() || view.game) return;
   const pack = view.availablePacks?.includes('aeo') && $('lobby-pack').value === 'aeo' ? 'aeo' : 'classic';

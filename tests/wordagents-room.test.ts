@@ -303,3 +303,59 @@ it('does not fall back to the public deck in a team-only room with no private de
     await worker.dispose();
   }
 }, 30000);
+
+it('lets only the host enable chosen teams and keeps player choices across reconnects and rematches', async () => {
+ const stub=ns.get(ns.idFromName('choose-teams'));
+ await stub.fetch('https://test/create',{method:'POST',body:JSON.stringify({roomCode:'PICK'})});
+ const clients=[];
+ for(let i=0;i<5;i++){
+  const c=await connect('tg_'+(201+i),stub);clients.push(c);c.send({type:'join'});
+  await expect.poll(()=>c.state()?.players.length).toBe(i+1);
+ }
+ const [host,blue]=clients;
+ const guest=await connect('guest_choose',stub);
+ let returning: Awaited<ReturnType<typeof connect>> | undefined;
+ const error=async(c:typeof host,message:string)=>await expect.poll(()=>c.frames.some(f=>f.type==='error'&&f.message.includes(message))).toBe(true);
+ try {
+  expect(host.state().teamMode).toBe('random');
+  blue.send({type:'teamMode',mode:'choose'});await error(blue,'Only the host');
+  host.send({type:'teamMode',mode:'choose'});await expect.poll(()=>guest.state()?.teamMode).toBe('choose');
+  guest.send({type:'pickTeam',team:'red'});await error(guest,'Join the room');
+  host.send({type:'start'});await error(host,'Everyone must choose');
+  for(const [i,c] of clients.entries()){
+   const team=i===1?'blue':'red';
+   c.send({type:'pickTeam',team,playerId:'tg_999',role:'spymaster'});
+   await expect.poll(()=>c.state()?.you.team).toBe(team);
+  }
+  host.send({type:'start'});await error(host,'at least two players');
+  clients[4].send({type:'pickTeam',team:'blue'});
+  await expect.poll(()=>host.state().players.filter((p:any)=>p.team==='blue')).toHaveLength(2);
+  expect(host.state().players.every((p:any)=>p.role===null)).toBe(true);
+  returning=await connect('tg_202',stub);await expect.poll(()=>returning?.state()?.you.team).toBe('blue');
+  clients[1]=returning;
+  const picks=(s:any)=>s.players.map((p:any)=>[p.id,p.team]);
+  const chosen=picks(host.state());
+  host.send({type:'start',pack:'aeo'});await expect.poll(()=>guest.state()?.game?.phase).toBe('clue');
+  expect(picks(host.state())).toEqual(chosen);
+  expectAllocation(host.state().players,5);
+  expect(guest.state().game.cards.every((c:any)=>c.color===null)).toBe(true);
+  host.send({type:'pickTeam',team:'blue'});await error(host,'only in the lobby');
+  const {game,revision}=host.state();
+  await expect.poll(()=>clients.every(c=>c.state()?.game?.id===game.id)).toBe(true);
+  const spy=clients.find(c=>c.state().you.team===game.turn&&c.state().you.role==='spymaster')!;
+  const op=clients.find(c=>c.state().you.team===game.turn&&c.state().you.role==='operative')!;
+  spy.send({type:'clue',word:'Conceptual',count:1,gameId:game.id,revision});
+  await expect.poll(()=>op.state().game.phase).toBe('guess');
+  op.send({type:'guess',index:spy.state().game.cards.findIndex((c:any)=>c.color==='assassin'),gameId:game.id,revision:op.state().revision});
+  await expect.poll(()=>host.state().game.phase).toBe('finished');
+  host.send({type:'start'});await expect.poll(()=>guest.state()?.game?.id).not.toBe(game.id);
+  expect(picks(guest.state())).toEqual(chosen);
+  expect(guest.state().pack).toBe('aeo');
+  host.send({type:'abandon'});await expect.poll(()=>guest.state().game).toBeNull();
+  expect(picks(guest.state())).toEqual(chosen);
+  host.send({type:'teamMode',mode:'random'});await expect.poll(()=>guest.state().teamMode).toBe('random');
+  expect(guest.state().players.every((p:any)=>p.team===null&&p.role===null)).toBe(true);
+  host.send({type:'teamMode',mode:'choose'});await expect.poll(()=>guest.state().teamMode).toBe('choose');
+  expect(guest.state().players.every((p:any)=>p.team===null)).toBe(true);
+ } finally {for(const c of [...clients,guest])c.ws.close();}
+},30000);

@@ -81,7 +81,7 @@
         <p class="wa-eyebrow">Mission briefing</p>
         <h2 id="brief-title">How a round works</h2>
         <ol class="wa-steps">
-          <li><b>Get your role</b><span>Each round randomly assigns two balanced teams. Spymasters see the secret key; operatives guess.</span></li>
+          <li><b>Get your role</b><span>The host can shuffle teams or let players pick sides. Spymasters see the secret key; operatives guess.</span></li>
           <li><b>Give one clue</b><span>The spymaster says one word and a number linking that many of their agents.</span></li>
           <li><b>Reveal together</b><span>Operatives mark ideas for teammates, then reveal. Wrong colour ends the turn.</span></li>
           <li><b>Find them all</b><span>First team to uncover every agent wins. The assassin loses instantly.</span></li>
@@ -106,7 +106,18 @@
         <button id="btn-share" type="button" class="btn btn-secondary">Share Invite Link</button>
       </div>
 
+      <div id="lobby-team-picker" class="wa-pack-picker hidden">
+        <label for="lobby-team-mode">Team setup</label>
+        <select id="lobby-team-mode" disabled>
+          <option value="random">Random teams</option>
+          <option value="choose">Choose teams</option>
+        </select>
+      </div>
       <p class="wa-lobby-note">Teams and roles are assigned randomly at the start of every round.</p>
+      <div id="lobby-team-choices" class="wa-team-choices hidden" role="group" aria-label="Choose your team">
+        <button id="btn-pick-red" type="button" class="btn btn-secondary red" aria-pressed="false">Join Red</button>
+        <button id="btn-pick-blue" type="button" class="btn btn-secondary blue" aria-pressed="false">Join Blue</button>
+      </div>
       <div id="lobby-roster" class="wa-roster"></div>
 
       <ul id="lobby-checklist" class="wa-checklist" aria-label="Ready to start"></ul>
@@ -242,7 +253,7 @@
       <h2 id="rules-title">How to Play</h2>
       <p>Two teams race to find their secret agents hidden among <b>25 words</b>. The starting team has <b>nine</b> agents, the other <b>eight</b>. There are also seven civilians and one assassin.</p>
       <h3>Teams and roles</h3>
-      <p>Each team has one <b>spymaster</b> and at least one <b>operative</b>. Only spymasters see the key: which words belong to which team. Four to twelve players can join. Teams and roles are assigned randomly every round.</p>
+      <p>Each team has one <b>spymaster</b> and at least one <b>operative</b>. Only spymasters see the key: which words belong to which team. Four to twelve players can join. The host can keep random teams or let players choose Red or Blue. One spymaster is assigned per team each round.</p>
       <h3>Your turn</h3>
       <ol>
         <li>The spymaster gives <b>one word and a number</b>, e.g. <i>TIDE · 3</i>, linking that many of their team’s agents.</li>

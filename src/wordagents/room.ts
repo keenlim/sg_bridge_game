@@ -6,6 +6,7 @@ import { newGame, giveClue, guess, endTurn, toggleMark, gameView, shuffle, type 
 import { readTeamConfig, type Pack } from './packs';
 import { PUBLIC_AEO_DECK } from './public-aeo-words';
 
+type TeamMode = 'random' | 'choose';
 type Role = 'spymaster' | 'operative';
 interface Player { id: string; name: string; team: Team | null; role: Role | null; connected: boolean }
 interface State {
@@ -20,6 +21,7 @@ interface State {
   game: Game | null;
   privateRoom?: boolean;
   pack?: Pack;
+  teamMode?: TeamMode;
 }
 interface Session { id: string; name: string }
 
@@ -153,6 +155,24 @@ export class WordAgentsRoom extends DurableObject<Env> {
           case 'choose': case 'randomize':
             // An older tab may still send a lobby selection after deployment.
             throw new Error('Teams and roles are assigned when a round starts. Refresh for the new lobby.');
+          case 'teamMode': {
+            if (!host) throw new Error('Only the host can change team setup.');
+            if (state.game) throw new Error('Change team setup only in the lobby.');
+            const mode = msg.mode;
+            if (mode !== 'random' && mode !== 'choose') throw new Error('Choose a known team setup.');
+            if (mode !== (state.teamMode ?? 'random')) {
+              state.teamMode = mode;
+              for (const p of state.players) { p.team = null; p.role = null; }
+            }
+            break;
+          }
+          case 'pickTeam':
+            if (state.game) throw new Error('Choose your team only in the lobby.');
+            if (!player) throw new Error('Join the room before choosing a team.');
+            if (state.teamMode !== 'choose') throw new Error('The host has set this room to random teams.');
+            if (msg.team !== 'red' && msg.team !== 'blue') throw new Error('Choose Red or Blue.');
+            player.team = msg.team;
+            break;
           case 'start': {
             if (!host) throw new Error('Only the host can start.');
             if (active) throw new Error('Finish the round first.');
@@ -168,8 +188,18 @@ export class WordAgentsRoom extends DurableObject<Env> {
             if (state.game && pack !== (state.pack ?? 'classic')) throw new Error('Return to the lobby to change packs.');
             const deck = privateRoom ? this.teamConfig.deck : PUBLIC_AEO_DECK;
             if (pack === 'aeo' && !deck) throw new Error('The AEO word pack is not available.');
+            const chosenTeams = state.teamMode === 'choose' ? TEAMS.map(team => state.players.filter(p => p.team === team)) : null;
+            if (chosenTeams) {
+              if (state.players.some(p => !p.team)) throw new Error('Everyone must choose a team.');
+              if (chosenTeams.some(members => members.length < 2)) throw new Error('Red and Blue each need at least two players.');
+            }
             const game = newGame(pack === 'aeo' ? deck! : undefined);
-            randomizeTeams(state.players);
+            if (chosenTeams) {
+              for (const members of chosenTeams) {
+                const spymaster = shuffle(members)[0];
+                for (const p of members) p.role = p === spymaster ? 'spymaster' : 'operative';
+              }
+            } else randomizeTeams(state.players);
             if (pack === 'aeo') state.privateRoom = privateRoom;
             state.pack = pack;
             state.game = game;
@@ -255,12 +285,15 @@ export class WordAgentsRoom extends DurableObject<Env> {
       return;
     }
     const deck = privateRoom ? this.teamConfig.deck : PUBLIC_AEO_DECK;
-    const players = state.game ? state.players : state.players.map(p => ({ ...p, team: null, role: null }));
+    const teamMode = state.teamMode ?? 'random';
+    const players = state.game ? state.players : state.players.map(p => ({
+      ...p, team: teamMode === 'choose' ? p.team : null, role: null,
+    }));
     const player = players.find(p => p.id === id);
     try {
       ws.send(JSON.stringify({
         type: 'state', roomCode: state.roomCode, revision: state.revision, hostId: effectiveHost(state),
-        players, watchers, maxPlayers: MAX_PLAYERS,
+        players, watchers, maxPlayers: MAX_PLAYERS, teamMode,
         ...(deck ? { availablePacks: ['classic', 'aeo'], pack: state.pack ?? 'classic' } : {}),
         you: { id, team: player?.team ?? null, role: player?.role ?? null, removed: !player && !!state.removed?.includes(id) },
         game: state.game ? gameView(state.game, player?.role === 'spymaster') : null,
