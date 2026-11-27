@@ -375,3 +375,58 @@ it('lets only the host enable chosen teams and keeps player choices across recon
   expect(guest.state().players.every((p:any)=>p.team===null)).toBe(true);
  } finally {for(const c of [...clients,guest])c.ws.close();}
 },30000);
+
+it('counts only current teammates’ nominations and awards the spymaster role without exposing the key', async () => {
+ const stub=ns.get(ns.idFromName('spymaster-nominations'));
+ await stub.fetch('https://test/create',{method:'POST',body:JSON.stringify({roomCode:'VOTE'})});
+ const clients=[];
+ for(let i=0;i<4;i++){
+  const client=await connect('tg_'+(301+i),stub);clients.push(client);client.send({type:'join'});
+  await expect.poll(()=>client.state()?.players.length).toBe(i+1);
+ }
+ const [host,red,blue,other]=clients;
+ const guest=await connect('guest_voter',stub);
+ const error=async(c:typeof host,part:string)=>await expect.poll(()=>c.frames.some(f=>f.type==='error'&&f.message.includes(part))).toBe(true);
+ const vote=(c:typeof host,team:string,playerId:string|null)=>c.send({type:'nominateSpymaster',team,playerId});
+ try {
+  vote(host,'red','tg_302');await error(host,'Choose teams');
+  host.send({type:'teamMode',mode:'choose'});
+  await expect.poll(()=>other.state()?.teamMode).toBe('choose');
+  for(const [i,c] of clients.entries()){
+   const team=i<2?'red':'blue';
+   c.send({type:'pickTeam',team});
+   await expect.poll(()=>c.state()?.you.team).toBe(team);
+  }
+  vote(guest,'red','tg_302');await error(guest,'Join a team');
+  vote(host,'red','tg_303');await error(host,'your own team');
+  vote(host,'blue','tg_303');await error(host,'Your team changed');
+  const staleRevision=host.state().revision;
+  vote(host,'red','tg_302');
+  await expect.poll(()=>host.state()?.spymasterNomination?.vote).toBe('tg_302');
+  expect(guest.state().spymasterNomination).toBeUndefined();
+  expect(blue.state().spymasterNomination.counts).toEqual({});
+  red.send({type:'pickTeam',team:'blue'});
+  await expect.poll(()=>host.state()?.spymasterNomination?.vote).toBeNull();
+  red.send({type:'pickTeam',team:'red'});
+  await expect.poll(()=>red.state()?.you.team).toBe('red');
+  vote(red,'red','tg_302');
+  vote(blue,'blue','tg_303');
+  await expect.poll(()=>host.state()?.spymasterNomination?.counts).toEqual({tg_302:1});
+  await expect.poll(()=>blue.state()?.spymasterNomination?.vote).toBe('tg_303');
+  vote(blue,'blue',null);
+  await expect.poll(()=>blue.state()?.spymasterNomination?.vote).toBeNull();
+  vote(other,'blue','tg_304');
+  await expect.poll(()=>blue.state()?.spymasterNomination?.counts).toEqual({tg_304:1});
+  host.send({type:'start',teamMode:'choose',revision:staleRevision});
+  await error(host,'Team setup changed');
+  host.send({type:'start',teamMode:'choose',revision:host.state().revision});
+  await expect.poll(()=>guest.state()?.game?.phase).toBe('clue');
+  expect(guest.state().players.filter((p:any)=>p.role==='spymaster').map((p:any)=>p.id)).toEqual(['tg_302','tg_304']);
+  expect(guest.state().game.cards.every((card:any)=>card.color===null)).toBe(true);
+  vote(host,'red','tg_301');await error(host,'only in the lobby');
+  host.send({type:'abandon'});
+  await expect.poll(()=>red.state()?.spymasterNomination?.vote).toBe('tg_302');
+  red.send({type:'leave'});
+  await expect.poll(()=>host.state()?.spymasterNomination?.counts).toEqual({});
+ } finally {for(const c of [...clients,guest])c.ws.close();}
+},30000);

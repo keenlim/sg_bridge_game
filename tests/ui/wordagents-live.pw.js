@@ -195,14 +195,30 @@ test('host combines Choose teams with public AEO and players keep their sides', 
     }
     await expect(host.page.locator('#lobby-roster')).toContainText('Red team · 2');
     await expect(host.page.locator('#lobby-roster')).toContainText('Blue team · 2');
+    const redVote = host.page.getByLabel('Nominate a spymaster');
+    const blueVote = bob.page.getByLabel('Nominate a spymaster');
+    await expect(guest.page.getByLabel('Nominate a spymaster')).toBeHidden();
+    await expect(redVote.locator('option')).toHaveCount(3);
+    await expect(redVote.locator('option').filter({ hasText: 'Pick Bob' })).toHaveCount(0);
+    await redVote.selectOption({ label: 'Pick Cara · 0' });
+    await blueVote.selectOption({ label: 'Pick Dan · 0' });
+    await expect(cara.page.getByLabel('Nominate a spymaster').locator('option').filter({ hasText: 'Pick Cara' }))
+      .toContainText('· 1');
+    await expect(blueVote.locator('option:checked')).toHaveText('Pick Dan · 1');
     await bob.page.reload();
     await expect(bob.page.getByRole('button', { name: 'Join Blue' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(blueVote.locator('option:checked')).toHaveText('Pick Dan · 1');
     await expect(host.page.locator('#btn-start')).toBeEnabled();
     await host.page.locator('#lobby-pack').selectOption('aeo');
     await press(host, host.page.locator('#btn-start'));
     await expect(guest.page.locator('#screen-game')).toHaveClass(/active/);
     const launched = await state(host.page);
     expect(launched.pack).toBe('aeo');
+    expect(launched.players.filter(p => p.role === 'spymaster').map(p => p.name)).toEqual(['Pick Cara', 'Pick Dan']);
+    const guestBoard = (await state(guest.page)).game;
+    expect(guestBoard.cards.every(card => card.color === null)).toBe(true);
+    await expect(cara.page.locator('#wa-you')).toContainText('spymaster');
+    await expect(dan.page.locator('#wa-you')).toContainText('spymaster');
     const words = launched.game.cards.map((card) => card.word);
     expect(new Set(words).size).toBe(25);
     for (const [key, count] of [['themed', 15], ['technology', 6], ['wildcards', 4]]) {

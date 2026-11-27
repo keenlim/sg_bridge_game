@@ -118,6 +118,13 @@
         <button id="btn-pick-red" type="button" class="btn btn-secondary red" aria-pressed="false">Join Red</button>
         <button id="btn-pick-blue" type="button" class="btn btn-secondary blue" aria-pressed="false">Join Blue</button>
       </div>
+      <div id="lobby-spymaster-picker" class="wa-pack-picker hidden">
+        <label for="lobby-spymaster-vote">Nominate a spymaster</label>
+        <select id="lobby-spymaster-vote" aria-describedby="lobby-spymaster-help" disabled>
+          <option value="">No vote</option>
+        </select>
+        <small id="lobby-spymaster-help">One optional vote per player. Most votes wins. Ties or no votes are decided randomly.</small>
+      </div>
       <div id="lobby-roster" class="wa-roster"></div>
 
       <ul id="lobby-checklist" class="wa-checklist" aria-label="Ready to start"></ul>
@@ -269,6 +276,6 @@
   </div>
 
   <script src="/fc-auth.js"></script>
-  <script src="/wordagents/wordagents.js?v=team-setup"></script>
+  <script src="/wordagents/wordagents.js?v=spymaster-nominations"></script>
 </body>
 </html>

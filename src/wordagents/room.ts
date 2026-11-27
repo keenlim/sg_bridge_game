@@ -22,6 +22,7 @@ interface State {
   privateRoom?: boolean;
   pack?: Pack;
   teamMode?: TeamMode;
+  spymasterVotes?: Record<string, string>;
 }
 interface Session { id: string; name: string }
 
@@ -43,6 +44,22 @@ function randomizeTeams(players: Player[]): void {
     p.team = i % 2 === 0 ? first : first === 'red' ? 'blue' : 'red';
     p.role = i < 2 ? 'spymaster' : 'operative';
   });
+}
+
+/** A seat change voids both this player's ballot and ballots for this seat. */
+function clearVotesFor(state: State, id: string) {
+  for (const [voter, nominee] of Object.entries(state.spymasterVotes ?? {})) {
+    if (voter === id || nominee === id) delete state.spymasterVotes![voter];
+  }
+}
+
+function nominationCounts(state: State, members: Player[]): Record<string, number> {
+  const seats = new Set(members.filter(p => p.connected).map(p => p.id));
+  const counts: Record<string, number> = {};
+  for (const [voter, nominee] of Object.entries(state.spymasterVotes ?? {})) {
+    if (seats.has(voter) && seats.has(nominee)) counts[nominee] = (counts[nominee] ?? 0) + 1;
+  }
+  return counts;
 }
 
 export class WordAgentsRoom extends DurableObject<Env> {
@@ -162,6 +179,7 @@ export class WordAgentsRoom extends DurableObject<Env> {
             if (mode !== 'random' && mode !== 'choose') throw new Error('Choose a known team setup.');
             if (mode === (state.teamMode ?? 'random')) { this.send(ws, state, session.id); return; }
             state.teamMode = mode;
+            delete state.spymasterVotes;
             for (const p of state.players) { p.team = null; p.role = null; }
             break;
           }
@@ -171,8 +189,25 @@ export class WordAgentsRoom extends DurableObject<Env> {
             if (state.teamMode !== 'choose') throw new Error('The host has set this room to random teams.');
             if (msg.team !== 'red' && msg.team !== 'blue') throw new Error('Choose Red or Blue.');
             if (player.team === msg.team) { this.send(ws, state, session.id); return; }
+            clearVotesFor(state, player.id);
             player.team = msg.team;
             break;
+          case 'nominateSpymaster': {
+            if (state.game) throw new Error('Nominate your spymaster only in the lobby.');
+            if (state.teamMode !== 'choose') throw new Error('Spymaster nominations are available in Choose teams.');
+            if (!player?.team) throw new Error('Join a team before nominating a spymaster.');
+            if (msg.team !== player.team) throw new Error('Your team changed. Review the roster and try again.');
+            const nominee = msg.playerId;
+            if (nominee !== null && (typeof nominee !== 'string' ||
+              !state.players.some(p => p.id === nominee && p.team === player.team && p.connected))) {
+              throw new Error('Nominate an online player from your own team.');
+            }
+            const votes = state.spymasterVotes ??= {};
+            if ((votes[player.id] ?? null) === nominee) { this.send(ws, state, session.id); return; }
+            if (nominee === null) delete votes[player.id];
+            else votes[player.id] = nominee;
+            break;
+          }
           case 'start': {
             if (!host) throw new Error('Only the host can start.');
             if (active) throw new Error('Finish the round first.');
@@ -203,7 +238,9 @@ export class WordAgentsRoom extends DurableObject<Env> {
             const game = newGame(pack === 'aeo' ? deck! : undefined);
             if (chosenTeams) {
               for (const members of chosenTeams) {
-                const spymaster = shuffle(members)[0];
+                const counts = nominationCounts(state, members);
+                const topCount = Math.max(0, ...Object.values(counts));
+                const spymaster = shuffle(members.filter(p => (counts[p.id] ?? 0) === topCount))[0];
                 for (const p of members) p.role = p === spymaster ? 'spymaster' : 'operative';
               }
             } else randomizeTeams(state.players);
@@ -249,6 +286,7 @@ export class WordAgentsRoom extends DurableObject<Env> {
           case 'leave':
             if (!player) return;
             if (active) throw new Error('Roles are locked until the round ends. You can close this tab and reconnect later.');
+            clearVotesFor(state, session.id);
             state.players = state.players.filter(p => p.id !== session.id);
             if (state.hostId === session.id) state.hostId = state.players.find(p => p.connected)?.id ?? state.players[0]?.id ?? null;
             break;
@@ -256,6 +294,7 @@ export class WordAgentsRoom extends DurableObject<Env> {
             if (!host || state.game) throw new Error('Only the host can remove players in the lobby.');
             if (msg.playerId === session.id) throw new Error('Use leave instead.');
             if (typeof msg.playerId !== 'string' || !state.players.some(p => p.id === msg.playerId)) return;
+            clearVotesFor(state, msg.playerId);
             state.players = state.players.filter(p => p.id !== msg.playerId);
             // A stand-in host removing the absent host takes the room over.
             if (state.hostId === msg.playerId) state.hostId = session.id;
@@ -297,10 +336,14 @@ export class WordAgentsRoom extends DurableObject<Env> {
       ...p, team: teamMode === 'choose' ? p.team : null, role: null,
     }));
     const player = players.find(p => p.id === id);
+    const nomination = !state.game && teamMode === 'choose' && player?.team ? {
+      vote: state.spymasterVotes?.[id] ?? null,
+      counts: nominationCounts(state, state.players.filter(p => p.team === player.team)),
+    } : undefined;
     try {
       ws.send(JSON.stringify({
         type: 'state', roomCode: state.roomCode, revision: state.revision, hostId: effectiveHost(state),
-        players, watchers, maxPlayers: MAX_PLAYERS, teamMode,
+        players, watchers, maxPlayers: MAX_PLAYERS, teamMode, spymasterNomination: nomination,
         ...(deck ? { availablePacks: ['classic', 'aeo'], pack: state.pack ?? 'classic' } : {}),
         you: { id, team: player?.team ?? null, role: player?.role ?? null, removed: !player && !!state.removed?.includes(id) },
         game: state.game ? gameView(state.game, player?.role === 'spymaster') : null,

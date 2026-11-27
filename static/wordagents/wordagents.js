@@ -382,6 +382,9 @@ function renderLobbyLoading() {
   $('lobby-pack').removeAttribute('data-selection-key');
   $('lobby-team-picker')?.classList.add('hidden');
   $('lobby-team-choices')?.classList.add('hidden');
+  $('lobby-spymaster-picker')?.classList.add('hidden');
+  const vote = $('lobby-spymaster-vote');
+  if (vote) vote.disabled = true;
   const mode = $('lobby-team-mode');
   if (mode) mode.disabled = true;
   $('lobby-roster').replaceChildren(el('div', 'wa-open-slot', 'Connecting to the room…'));
@@ -442,6 +445,32 @@ function lobbyReadiness() {
   return { items, valid: enough && allOnline && !teamIssue, enough, allOnline, teamIssue };
 }
 
+function renderSpymasterPicker() {
+  const select = $('lobby-spymaster-vote');
+  if (!select) return; // Older cached HTML does not have the optional picker.
+  const nomination = view.spymasterNomination;
+  $('lobby-spymaster-picker').classList.toggle('hidden', !nomination);
+  select.disabled = !nomination || !connected() || pending;
+  if (!nomination) return;
+  const teammates = view.players.filter(p => p.team === view.you.team);
+  const options = teammates.map(p => ({
+    id: p.id,
+    label: p.name + (p.id === view.you.id ? ' (you)' : '') + (p.connected ? '' : ' (offline)') +
+      ` · ${nomination.counts[p.id] ?? 0}`,
+    disabled: !p.connected,
+  }));
+  const key = JSON.stringify(options);
+  if (select.dataset.options !== key) {
+    select.replaceChildren(new Option('No vote', ''), ...options.map(p => {
+      const option = new Option(p.label, p.id);
+      option.disabled = p.disabled;
+      return option;
+    }));
+    select.dataset.options = key;
+  }
+  select.value = nomination.vote ?? '';
+}
+
 function renderLobby() {
   const you = view.you || {};
   const seated = !!me();
@@ -455,7 +484,7 @@ function renderLobby() {
     mode.disabled = !host || !connected() || pending;
   }
   $('screen-lobby').querySelector('.wa-lobby-note').textContent = manual
-    ? (mode ? 'Players choose Red or Blue. One spymaster per team is picked at random.'
+    ? (mode ? 'Players choose Red or Blue. The team can nominate a spymaster.'
       : 'Refresh this page to use Choose teams.')
     : 'Teams and roles are assigned randomly at the start of every round.';
   $('lobby-team-choices')?.classList.toggle('hidden', !manual || !seated);
@@ -465,6 +494,7 @@ function renderLobby() {
     button.setAttribute('aria-pressed', String(you.team === team));
     button.disabled = !manual || !seated || !connected() || pending;
   }
+  renderSpymasterPicker();
   const roster = $('lobby-roster');
   roster.replaceChildren(el('h3', 'wa-slot-label', `Players · ${view.players.length}/${view.maxPlayers || 12}`));
   const makeList = (players) => {
@@ -972,6 +1002,11 @@ $('lobby-team-mode')?.addEventListener('change', (event) => {
 for (const team of TEAMS) {
   $(`btn-pick-${team}`)?.addEventListener('click', () => send('pickTeam', { team }));
 }
+$('lobby-spymaster-vote')?.addEventListener('change', (event) => {
+  if (view?.spymasterNomination && !view.game) {
+    send('nominateSpymaster', { team: view.you.team, playerId: event.target.value || null });
+  }
+});
 $('btn-start').addEventListener('click', () => {
   if (!isHost() || view.game) return;
   const pack = view.availablePacks?.includes('aeo') && $('lobby-pack').value === 'aeo' ? 'aeo' : 'classic';
