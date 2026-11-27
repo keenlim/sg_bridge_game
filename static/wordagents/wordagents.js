@@ -483,10 +483,12 @@ function renderLobby() {
     mode.value = manual ? 'choose' : 'random';
     mode.disabled = !host || !connected() || pending;
   }
-  $('screen-lobby').querySelector('.wa-lobby-note').textContent = manual
-    ? (mode ? 'Players choose Red or Blue. The team can nominate a spymaster.'
-      : 'Refresh this page to use Choose teams.')
-    : 'Teams and roles are assigned randomly at the start of every round.';
+  const missingNominationPicker = seated && view.spymasterNomination && !$('lobby-spymaster-vote');
+  $('screen-lobby').querySelector('.wa-lobby-note').textContent = !manual
+    ? 'Teams and roles are assigned randomly at the start of every round.'
+    : !mode ? 'Refresh this page to use Choose teams.'
+    : missingNominationPicker ? 'Refresh this page to nominate a spymaster. Your team choice is saved.'
+    : 'Players choose Red or Blue. The team can nominate a spymaster.';
   $('lobby-team-choices')?.classList.toggle('hidden', !manual || !seated);
   for (const team of TEAMS) {
     const button = $(`btn-pick-${team}`);

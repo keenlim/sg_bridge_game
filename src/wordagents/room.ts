@@ -4,7 +4,7 @@ import { normalizePlayerName } from '../player-name';
 import { newGame, giveClue, guess, endTurn, toggleMark, gameView, shuffle, type Game, type Team } from './engine';
 
 import { readTeamConfig, type Pack } from './packs';
-import { PUBLIC_AEO_DECK } from './public-aeo-words';
+import { drawPublicAeoDeck, PUBLIC_AEO_DECK } from './public-aeo-words';
 
 type TeamMode = 'random' | 'choose';
 type Role = 'spymaster' | 'operative';
@@ -235,7 +235,7 @@ export class WordAgentsRoom extends DurableObject<Env> {
               if (state.players.some(p => !p.team)) throw new Error('Everyone must choose a team.');
               if (chosenTeams.some(members => members.length < 2)) throw new Error('Red and Blue each need at least two players.');
             }
-            const game = newGame(pack === 'aeo' ? deck! : undefined);
+            const game = newGame(pack === 'aeo' ? (privateRoom ? deck! : drawPublicAeoDeck()) : undefined);
             if (chosenTeams) {
               for (const members of chosenTeams) {
                 const counts = nominationCounts(state, members);

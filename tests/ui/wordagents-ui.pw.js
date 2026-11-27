@@ -24,7 +24,7 @@ const initial = () => ({
 const frames = (page) => page.evaluate(() => framesSent.map((s) => { try { return JSON.parse(s); } catch { return {}; } }));
 const push = (page, state) => page.evaluate((s) => fakeSocket.push(s), state);
 
-async function setup(page, state = initial(), { legacyLobby = false } = {}) {
+async function setup(page, state = initial(), { legacyLobby = false, legacyNominations = false } = {}) {
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/me') return route.fulfill({ json: { displayName: 'Alex' } });
@@ -34,6 +34,9 @@ async function setup(page, state = initial(), { legacyLobby = false } = {}) {
       let body = fs.readFileSync(path.join(root, file), 'utf8');
       if (legacyLobby && file === 'wordagents/index.html') {
         body = body.replace(/<div id="lobby-team-(?:picker|choices)"[^>]*>[\s\S]*?<\/div>/g, '');
+      }
+      if (legacyNominations && file === 'wordagents/index.html') {
+        body = body.replace(/<div id="lobby-spymaster-picker"[^>]*>[\s\S]*?<\/div>/, '');
       }
       return route.fulfill({ body, contentType: file.endsWith('.js') ? 'application/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
     }
@@ -367,3 +370,39 @@ test('a cached lobby page still works when the team-setup script is newer', asyn
   await expect(page.locator('#btn-start')).toBeEnabled();
   expect(errors).toEqual([]);
 });
+
+function nominationLobby() {
+  const lobby = initial();
+  lobby.game = null;
+  lobby.teamMode = 'choose';
+  lobby.you.role = null;
+  lobby.players = lobby.players.map(player => ({ ...player, role: null }));
+  lobby.spymasterNomination = { vote: 'p2', counts: { p2: 1 } };
+  return lobby;
+}
+
+test('cached Choose teams lobby explains how to get the missing nomination picker', async ({ page }) => {
+  await setup(page, nominationLobby(), { legacyNominations: true });
+  await expect(page.locator('#lobby-roster .wa-member')).toHaveCount(4);
+  await expect(page.locator('#btn-start')).toBeEnabled();
+  await expect(page.locator('#screen-lobby .wa-lobby-note')).toContainText('Refresh');
+  await expect(page.locator('#lobby-spymaster-vote')).toHaveCount(0);
+});
+
+for (const width of [320, 390]) {
+  test(`long candidate names keep the nomination picker within the ${width}px lobby`, async ({ page }) => {
+    const lobby = nominationLobby();
+    lobby.players[1].name = 'W'.repeat(64);
+    await page.setViewportSize({ width, height: 740 });
+    await setup(page, lobby);
+    await expect(page.locator('#lobby-spymaster-vote option:checked')).toHaveText('W'.repeat(64) + ' · 1');
+    const rects = await page.locator('#lobby-spymaster-picker').evaluate(picker => {
+      const outer = picker.getBoundingClientRect();
+      return [...picker.children].map(child => {
+        const rect = child.getBoundingClientRect();
+        return rect.left >= outer.left - 1 && rect.right <= outer.right + 1;
+      });
+    });
+    expect(rects).toEqual([true, true, true]);
+  });
+}

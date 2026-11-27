@@ -85,3 +85,27 @@ it('fails closed on missing team settings, invalid labels and duplicate cards', 
  expect(readDeck(JSON.stringify({...deck, wildcards:['<script>', ...deck.wildcards]}))).toBeNull();
  expect(readDeck(JSON.stringify({...deck, wildcards:[]}))).toBeNull();
 });
+
+it('deals the public AEO mix without crowding boards with similar card families', async () => {
+ const { drawPublicAeoDeck, PUBLIC_AEO_DECK } = await import('../src/wordagents/public-aeo-words');
+ const families: [number, string[]][] = [
+  [2, ['genCentral', 'appCentral', 'devCentral', 'agentCentral', 'searchCentral', 'dataCentral', 'flowCentral', 'snacCentral']],
+  [1, ['Gateway', 'AI Gateway']],
+  [1, ['MCP', 'MCP Hub']],
+  [1, ['Prompt', 'System Prompt', 'Prompt Injection']],
+  [1, ['Agent', 'Agent Loop', 'Agent Memory', 'Multi-Agent', 'Subagent']],
+  [1, ['Model', 'Model Card']],
+ ];
+ const seen = new Set<string>();
+ for (let i = 0; i < 512; i++) {
+  const deck = drawPublicAeoDeck();
+  const words = [...deck.themed, ...deck.technology, ...deck.wildcards];
+  expect(new Set(words).size).toBe(25);
+  expect([deck.themed.length, deck.technology.length, deck.wildcards.length]).toEqual([15, 6, 4]);
+  for (const [bucket, original] of Object.entries(PUBLIC_AEO_DECK)) expect(original).toEqual(expect.arrayContaining(deck[bucket as keyof typeof deck]));
+  for (const [cap, family] of families) expect(words.filter(word => family.includes(word)).length).toBeLessThanOrEqual(cap);
+  for (const word of words) seen.add(word);
+ }
+ // The cap limits co-occurrence, not membership in the pack.
+ expect(seen.size).toBe(168);
+});

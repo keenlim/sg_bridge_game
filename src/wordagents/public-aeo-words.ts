@@ -1,4 +1,5 @@
-import type { AeoDeck } from './packs';
+import { AEO_MIX, type AeoDeck } from './packs';
+import { shuffle } from './engine';
 
 export const PUBLIC_AEO_DECK = {
   themed: [
@@ -43,3 +44,34 @@ export const PUBLIC_AEO_DECK = {
     'Alchemist', 'Matcha',
   ],
 } as const satisfies AeoDeck;
+
+// Keep unusually similar labels apart on public boards, even across buckets.
+const CARD_FAMILIES = [
+  { limit: 2, words: ['genCentral', 'appCentral', 'devCentral', 'agentCentral', 'searchCentral', 'dataCentral', 'flowCentral', 'snacCentral'] },
+  { limit: 1, words: ['Gateway', 'AI Gateway'] },
+  { limit: 1, words: ['MCP', 'MCP Hub'] },
+  { limit: 1, words: ['Prompt', 'System Prompt', 'Prompt Injection'] },
+  { limit: 1, words: ['Agent', 'Agent Loop', 'Agent Memory', 'Multi-Agent', 'Subagent'] },
+  { limit: 1, words: ['Model', 'Model Card'] },
+];
+const familyByWord = new Map(CARD_FAMILIES.flatMap((family) => family.words.map((word) => [word, family] as const)));
+
+/** Choose the public board's words without changing the shared Classic or private-deck draw. */
+export function drawPublicAeoDeck(): AeoDeck {
+  const counts = new Map<(typeof CARD_FAMILIES)[number], number>();
+  const result: Record<keyof AeoDeck, string[]> = { themed: [], technology: [], wildcards: [] };
+  for (const bucket of shuffle(Object.keys(AEO_MIX) as (keyof AeoDeck)[])) {
+    for (const word of shuffle(PUBLIC_AEO_DECK[bucket])) {
+      const family = familyByWord.get(word);
+      if (family) {
+        const count = counts.get(family) ?? 0;
+        if (count >= family.limit) continue;
+        counts.set(family, count + 1);
+      }
+      result[bucket].push(word);
+      if (result[bucket].length === AEO_MIX[bucket]) break;
+    }
+    if (result[bucket].length !== AEO_MIX[bucket]) throw new Error('The public AEO pack cannot fill a board.');
+  }
+  return result;
+}

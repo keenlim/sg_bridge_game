@@ -54,6 +54,11 @@ into rematches, and the host can return to the lobby to change it. The public
 pack uses the usual Telegram requirements for players and allows guests to watch.
 It can run on the existing public Worker without a database migration.
 
+Public AEO boards cap related labels across all three buckets: at most two
+`Central` product names and at most one label from each of the Gateway, MCP,
+Prompt, Agent and Model families. No cards are removed. The 15/6/4 mix,
+Classic boards and separately configured private decks are unchanged.
+
 ## Team-only word pack
 
 For an approved **separate** installation, set both server-side bindings:
